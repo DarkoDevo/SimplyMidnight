@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SimplyMidnight Overlay</title>
+    <script type="module" src="/src/main.js"></script>
+  </head>
+  <body>
+    <div id="app">
+      <aside class="panel">
+        <h1>SimplyMidnight Overlay</h1>
+        <p class="lead">
+          Capture the WoW client, crop the in-game export strip, and mirror it into this external window for GGL.
+        </p>
+
+        <div class="controls">
+          <button id="captureButton">Start Capture</button>
+          <label class="checkbox">
+            <input id="alwaysOnTop" type="checkbox" checked />
+            Always on top
+          </label>
+        </div>
+
+        <div class="grid">
+          <label>X <input id="cropX" type="number" value="0" /></label>
+          <label>Y <input id="cropY" type="number" value="0" /></label>
+          <label>Width <input id="cropW" type="number" value="390" /></label>
+          <label>Height <input id="cropH" type="number" value="132" /></label>
+          <label>Scale <input id="scale" type="number" min="0.25" step="0.05" value="2" /></label>
+        </div>
+
+        <div class="notes">
+          <p>1. Start the addon in WoW and unlock the HUD if you need to move it.</p>
+          <p>2. Click <strong>Start Capture</strong> and pick the WoW window or monitor.</p>
+          <p>3. Adjust crop values until the mirrored export strip fills the preview.</p>
+          <p>4. Transparent click-through overlay mode is reserved for a later phase.</p>
+        </div>
+
+        <p id="status">Idle</p>
+      </aside>
+
+      <main class="preview">
+        <video id="sourceVideo" autoplay playsinline muted hidden></video>
+        <canvas id="previewCanvas" width="780" height="264"></canvas>
+      </main>
+    </div>
+  </body>
+</html>
+

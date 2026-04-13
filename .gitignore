@@ -1,0 +1,5 @@
+OverlayApp/node_modules/
+OverlayApp/dist/
+OverlayApp/.vite/
+*.log
+.DS_Store

@@ -1,0 +1,19 @@
+## Interface: 120001, 120000
+## Title: SimplyMidnight
+## Notes: Spell suggestion HUD and external overlay bridge for Midnight.
+## Author: DarkoDevo
+## Version: 0.1.0
+## SavedVariables: SimplyMidnightDB
+## OptionalDeps: TellMeWhen, SimplyGlad
+
+SimplyMidnight.lua
+Core/Addon.lua
+Core/TaintGuard.lua
+Core/State.lua
+Core/Registry.lua
+Core/Recommendations.lua
+HUD/Export.lua
+Config/UI.lua
+Core/Commands.lua
+Adapters/SimplyGlad.lua
+
