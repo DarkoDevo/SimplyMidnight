@@ -10,93 +10,6 @@ local slotCycle = {
     utility = "primary",
 }
 
-local starterSpellsByClass = {
-    DEATHKNIGHT = {
-        {
-            spellID = 47541,
-            slot = "primary",
-            priority = 100,
-            enabled = true,
-            contentScope = "all",
-            conditions = { inCombat = true, requireTarget = true, targetHostile = true },
-        },
-        {
-            spellID = 49998,
-            slot = "secondary",
-            priority = 90,
-            enabled = true,
-            contentScope = "all",
-            conditions = { inCombat = true, playerHpBelow = 85 },
-        },
-        {
-            spellID = 48707,
-            slot = "defensive",
-            priority = 95,
-            enabled = true,
-            contentScope = "all",
-            conditions = { inCombat = true, playerHpBelow = 70 },
-        },
-        {
-            spellID = 47528,
-            slot = "interrupt",
-            priority = 110,
-            enabled = true,
-            contentScope = "all",
-            conditions = { inCombat = true, requireTarget = true, targetHostile = true, targetCasting = true },
-        },
-        {
-            spellID = 212552,
-            slot = "utility",
-            priority = 60,
-            enabled = true,
-            contentScope = "all",
-            conditions = { inCombat = true },
-        },
-    },
-    HUNTER = {
-        {
-            spellID = 34026,
-            slot = "primary",
-            priority = 100,
-            enabled = true,
-            contentScope = "all",
-            conditions = { inCombat = true, requireTarget = true, targetHostile = true },
-        },
-        {
-            spellID = 193455,
-            slot = "secondary",
-            priority = 90,
-            enabled = true,
-            contentScope = "all",
-            conditions = { inCombat = true, requireTarget = true, targetHostile = true },
-        },
-        {
-            spellID = 109304,
-            slot = "defensive",
-            priority = 95,
-            enabled = true,
-            contentScope = "all",
-            conditions = { inCombat = true, playerHpBelow = 70 },
-        },
-        {
-            spellID = 147362,
-            slot = "interrupt",
-            priority = 110,
-            enabled = true,
-            contentScope = "all",
-            conditions = { inCombat = true, requireTarget = true, targetHostile = true, targetCasting = true },
-        },
-        {
-            spellID = 781,
-            slot = "utility",
-            priority = 60,
-            enabled = true,
-            contentScope = "all",
-            conditions = { inCombat = true },
-        },
-    },
-}
-
 local function cloneTable(value)
     if type(value) ~= "table" then
         return value
@@ -119,6 +32,14 @@ local function normalizeSlot(slot)
     return "primary"
 end
 
+local function getCurrentSpecID()
+    local specIndex = GetSpecialization and GetSpecialization() or nil
+    if not specIndex or not GetSpecializationInfo then
+        return nil
+    end
+    return GetSpecializationInfo(specIndex)
+end
+
 function Registry:NormalizeEntry(entry)
     return {
         spellID = tonumber(entry.spellID),
@@ -128,29 +49,157 @@ function Registry:NormalizeEntry(entry)
         contentScope = entry.contentScope or "all",
         conditions = cloneTable(entry.conditions or {}),
         advancedRule = entry.advancedRule,
+        specID = tonumber(entry.specID),
+        packKey = entry.packKey,
+        source = entry.source,
+        note = entry.note,
     }
 end
 
 function Registry:Initialize()
+    local currentSpecID = getCurrentSpecID()
+    local previousVersion = tonumber(addon.db.registry.version) or 0
+
     if type(addon.db.registry.spells) ~= "table" then
         addon.db.registry.spells = {}
     end
+    if type(addon.db.registry.installedPacks) ~= "table" then
+        addon.db.registry.installedPacks = {}
+    end
 
-    if #addon.db.registry.spells == 0 then
-        local _, classTag = UnitClass("player")
-        local starterSpells = starterSpellsByClass[classTag] or {}
-        for _, entry in ipairs(starterSpells) do
-            table.insert(addon.db.registry.spells, self:NormalizeEntry(entry))
+    if previousVersion < 2 then
+        local looksLikeLegacyStarter = #addon.db.registry.spells > 0 and #addon.db.registry.spells <= 5
+        for _, entry in ipairs(addon.db.registry.spells) do
+            if entry.source or entry.packKey or entry.specID then
+                looksLikeLegacyStarter = false
+                break
+            end
         end
-    else
-        for index, entry in ipairs(addon.db.registry.spells) do
-            addon.db.registry.spells[index] = self:NormalizeEntry(entry)
+        if looksLikeLegacyStarter then
+            addon.db.registry.spells = {}
         end
+    end
+
+    for index, entry in ipairs(addon.db.registry.spells) do
+        addon.db.registry.spells[index] = self:NormalizeEntry(entry)
+        if addon.db.registry.spells[index].specID == nil then
+            addon.db.registry.spells[index].specID = currentSpecID
+        end
+        if addon.db.registry.spells[index].source == nil then
+            addon.db.registry.spells[index].source = "legacy"
+        end
+    end
+
+    addon.db.registry.version = addon.defaults.registry.version
+
+    self:EnsureCurrentPack(false)
+
+    if not self.eventFrame then
+        self.eventFrame = CreateFrame("Frame")
+        self.eventFrame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
+        self.eventFrame:SetScript("OnEvent", function(_, _, unitID)
+            if unitID ~= "player" then
+                return
+            end
+
+            self:EnsureCurrentPack(false)
+            if addon.ConfigUI and addon.ConfigUI.frame and addon.ConfigUI.frame:IsShown() then
+                addon.ConfigUI:Refresh()
+            end
+        end)
     end
 end
 
 function Registry:GetAll()
     return addon.db.registry.spells
+end
+
+function Registry:GetCurrentPack()
+    return addon.Packs and addon.Packs:GetCurrent() or nil
+end
+
+function Registry:GetCurrentPackLabel()
+    local pack = self:GetCurrentPack()
+    if pack then
+        return pack.name
+    end
+    return "Custom / Unsupported Spec"
+end
+
+function Registry:CountEntriesForSpec(specID)
+    local count = 0
+    specID = tonumber(specID)
+
+    for _, entry in ipairs(addon.db.registry.spells) do
+        if tonumber(entry.specID) == specID then
+            count = count + 1
+        end
+    end
+
+    return count
+end
+
+function Registry:InstallPack(pack, options)
+    options = options or {}
+    if type(pack) == "string" then
+        pack = addon.Packs and addon.Packs:GetByKey(pack) or nil
+    end
+
+    if not pack then
+        return false, "no built-in pack for this spec"
+    end
+
+    if not options.force and addon.db.registry.installedPacks[pack.key] then
+        return false, pack.name .. " is already installed"
+    end
+
+    local added = 0
+    for _, entry in ipairs(pack.entries or {}) do
+        local normalized = self:NormalizeEntry(entry)
+        normalized.specID = pack.specID
+        normalized.packKey = pack.key
+        normalized.source = "builtin"
+        table.insert(addon.db.registry.spells, normalized)
+        added = added + 1
+    end
+
+    addon.db.registry.installedPacks[pack.key] = addon.db.registry.version
+    return true, string.format("Installed %s (%d entries)", pack.name, added)
+end
+
+function Registry:EnsureCurrentPack(force)
+    local pack = self:GetCurrentPack()
+    if not pack then
+        return false, "no built-in pack for this spec"
+    end
+
+    if not force then
+        if addon.db.registry.installedPacks[pack.key] then
+            return false, pack.name .. " is already installed"
+        end
+        if self:CountEntriesForSpec(pack.specID) > 0 then
+            return false, pack.name .. " already has entries"
+        end
+    end
+
+    return self:InstallPack(pack, { force = force })
+end
+
+function Registry:ResetCurrentPack()
+    local pack = self:GetCurrentPack()
+    if not pack then
+        return false, "no built-in pack for this spec"
+    end
+
+    for index = #addon.db.registry.spells, 1, -1 do
+        local entry = addon.db.registry.spells[index]
+        if tonumber(entry.specID) == pack.specID then
+            table.remove(addon.db.registry.spells, index)
+        end
+    end
+
+    addon.db.registry.installedPacks[pack.key] = nil
+    return self:InstallPack(pack, { force = true })
 end
 
 function Registry:AddSpell(spellID, slot, priority)
@@ -171,6 +220,8 @@ function Registry:AddSpell(spellID, slot, priority)
         enabled = true,
         contentScope = "all",
         conditions = {},
+        specID = getCurrentSpecID(),
+        source = "manual",
     }))
 
     return true, spellName
@@ -240,4 +291,3 @@ function Registry:GetEntriesForSlot(slot)
 end
 
 addon.Registry = Registry
-

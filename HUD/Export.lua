@@ -236,7 +236,8 @@ function ExportHUD:Render(state, recommendations)
     if addon.session.debug then
         local adapterStatus = addon.SimplyGladAdapter and addon.SimplyGladAdapter:GetStatusLine() or "adapter: unavailable"
         local taintStatus = addon.TaintGuard and addon.TaintGuard:GetStatusLine() or "taint: unavailable"
-        self.debugText:SetText(adapterStatus .. " | " .. taintStatus)
+        local packLabel = addon.Registry and addon.Registry:GetCurrentPackLabel() or "unknown pack"
+        self.debugText:SetText(string.format("%s | enemies=%d | %s | %s", packLabel, state.environment.enemyCount or 0, adapterStatus, taintStatus))
         self.debugText:Show()
     else
         self.debugText:Hide()

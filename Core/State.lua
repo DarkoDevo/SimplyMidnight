@@ -15,6 +15,26 @@ local secondaryPowerByClass = {
     MAGE = Enum and Enum.PowerType and Enum.PowerType.ArcaneCharges or 16,
 }
 
+local function getVisibleEnemyCount()
+    local count = 0
+
+    if type(C_NamePlate) == "table" and type(C_NamePlate.GetNamePlates) == "function" then
+        local nameplates = C_NamePlate.GetNamePlates(false) or {}
+        for _, plate in ipairs(nameplates) do
+            local unitID = plate and plate.namePlateUnitToken
+            if unitID and UnitExists(unitID) and not UnitIsDead(unitID) and UnitCanAttack("player", unitID) then
+                count = count + 1
+            end
+        end
+    end
+
+    if count == 0 and UnitExists("target") and not UnitIsDead("target") and UnitCanAttack("player", "target") then
+        count = 1
+    end
+
+    return count
+end
+
 local function percentage(current, max)
     if not current or not max or max <= 0 then
         return 0
@@ -120,10 +140,13 @@ function State:Refresh()
     local targetExists = UnitExists("target")
     local targetAlive = targetExists and not UnitIsDead("target")
     local targetHostile = targetExists and UnitCanAttack("player", "target") or false
+    local petExists = UnitExists("pet")
+    local petAlive = petExists and not UnitIsDead("pet")
     local rangeBucket = getRangeBucket()
     local castInfo = getTargetCastingInfo()
     local specIndex = GetSpecialization and GetSpecialization() or nil
     local specID = specIndex and GetSpecializationInfo(specIndex) or nil
+    local enemyCount = getVisibleEnemyCount()
 
     self.snapshot = {
         updatedAt = GetTime(),
@@ -143,6 +166,8 @@ function State:Refresh()
             secondaryCurrent = secondaryCurrent,
             secondaryMax = secondaryMax,
             secondaryPct = secondaryPct,
+            petExists = petExists,
+            petAlive = petAlive,
         },
         target = {
             exists = targetExists,
@@ -156,6 +181,9 @@ function State:Refresh()
             interruptible = castInfo.interruptible,
             castName = castInfo.name,
             castRemainingMS = castInfo.remainingMS,
+        },
+        environment = {
+            enemyCount = enemyCount,
         },
         modes = flags,
     }

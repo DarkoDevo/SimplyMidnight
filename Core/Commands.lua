@@ -18,12 +18,19 @@ local function printHelp()
     addon:Print("Commands: /sm help | /sm config | /sm burst [seconds] | /sm hold [seconds]")
     addon:Print("/sm conserve on|off|toggle | /sm pause on|off|toggle | /sm debug on|off")
     addon:Print("/sm overlay on|off | /sm hud lock|unlock | /sm add <spellID> [slot] [priority] | /sm list")
+    addon:Print("/sm defaults | /sm reset")
 end
 
 local function printRegistry()
     for index, entry in ipairs(addon.Registry:GetAll()) do
         local spellName = addon:GetSpellName(entry.spellID) or tostring(entry.spellID)
-        addon:Print(string.format("%d. %s | slot=%s | prio=%d | enabled=%s", index, spellName, entry.slot, entry.priority, tostring(entry.enabled)))
+        addon:Print(string.format("%d. %s | slot=%s | prio=%d | spec=%s | enabled=%s", index, spellName, entry.slot, entry.priority, tostring(entry.specID or "-"), tostring(entry.enabled)))
+    end
+end
+
+local function refreshConfigIfShown()
+    if addon.ConfigUI and addon.ConfigUI.frame and addon.ConfigUI.frame:IsShown() then
+        addon.ConfigUI:Refresh()
     end
 end
 
@@ -82,12 +89,18 @@ function Commands:Initialize()
             local ok, info = addon.Registry:AddSpell(spellID, slot ~= "" and slot or "primary", priority ~= "" and tonumber(priority) or 50)
             if ok then
                 addon:Print("Added " .. tostring(info))
-                if addon.ConfigUI and addon.ConfigUI.frame and addon.ConfigUI.frame:IsShown() then
-                    addon.ConfigUI:Refresh()
-                end
+                refreshConfigIfShown()
             else
                 addon:Print(info or "Could not add spell")
             end
+        elseif command == "defaults" then
+            local ok, info = addon.Registry:EnsureCurrentPack(false)
+            addon:Print(info or (ok and "Installed current spec defaults" or "No defaults installed"))
+            refreshConfigIfShown()
+        elseif command == "reset" then
+            local ok, info = addon.Registry:ResetCurrentPack()
+            addon:Print(info or (ok and "Reset current spec defaults" or "Could not reset current spec"))
+            refreshConfigIfShown()
         elseif command == "list" then
             printRegistry()
         else
@@ -100,4 +113,3 @@ function Commands:Initialize()
 end
 
 addon.Commands = Commands
-

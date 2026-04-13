@@ -3,7 +3,7 @@ local addonName, addon = ...
 _G.SimplyMidnight = addon
 
 addon.name = addonName
-addon.version = "0.1.0"
+addon.version = "0.2.0"
 addon.constants = {
     questionMarkIcon = 134400,
     slotOrder = { "primary", "secondary", "defensive", "interrupt", "utility" },
@@ -26,8 +26,9 @@ addon.defaults = {
         visible = true,
     },
     registry = {
-        version = 1,
+        version = 2,
         spells = {},
+        installedPacks = {},
     },
 }
 

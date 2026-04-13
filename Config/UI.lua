@@ -46,7 +46,27 @@ function ConfigUI:Initialize()
 
     self.subTitle = self.frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     self.subTitle:SetPoint("TOPLEFT", self.title, "BOTTOMLEFT", 0, -4)
-    self.subTitle:SetText("Foundation editor: add spells, move slots, reorder priority. Advanced logic UI comes later.")
+    self.subTitle:SetText("Starter packs are live for Unholy DK and BM Hunter. Advanced logic editing still comes later.")
+
+    self.defaultsButton = CreateFrame("Button", nil, self.frame, "UIPanelButtonTemplate")
+    self.defaultsButton:SetSize(110, 22)
+    self.defaultsButton:SetPoint("TOPRIGHT", self.frame, "TOPRIGHT", -38, -34)
+    self.defaultsButton:SetText("Defaults")
+    self.defaultsButton:SetScript("OnClick", function()
+        local ok, info = addon.Registry:EnsureCurrentPack(false)
+        addon:Print(info or (ok and "Installed current spec defaults" or "Could not install defaults"))
+        self:Refresh()
+    end)
+
+    self.resetButton = CreateFrame("Button", nil, self.frame, "UIPanelButtonTemplate")
+    self.resetButton:SetSize(110, 22)
+    self.resetButton:SetPoint("RIGHT", self.defaultsButton, "LEFT", -8, 0)
+    self.resetButton:SetText("Reset Spec")
+    self.resetButton:SetScript("OnClick", function()
+        local ok, info = addon.Registry:ResetCurrentPack()
+        addon:Print(info or (ok and "Reset current spec defaults" or "Could not reset defaults"))
+        self:Refresh()
+    end)
 
     self.closeButton = CreateFrame("Button", nil, self.frame, "UIPanelCloseButton")
     self.closeButton:SetPoint("TOPRIGHT", -4, -4)
@@ -214,9 +234,9 @@ function ConfigUI:Refresh()
     end
 
     if #spells > #self.rows then
-        self.footer:SetText("Showing first " .. #self.rows .. " spells. More list UI and logic editing will come in later phases.")
+        self.footer:SetText("Pack: " .. addon.Registry:GetCurrentPackLabel() .. " | showing first " .. #self.rows .. " spells.")
     else
-        self.footer:SetText("Future foundation already reserved in Registry.conditions and Registry.advancedRule.")
+        self.footer:SetText("Pack: " .. addon.Registry:GetCurrentPackLabel() .. " | future logic editing still reserved in Registry.conditions and Registry.advancedRule.")
     end
 end
 
@@ -234,4 +254,3 @@ function ConfigUI:Toggle()
 end
 
 addon.ConfigUI = ConfigUI
-
