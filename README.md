@@ -26,4 +26,3 @@
 
 - The overlay app currently mirrors a manually selected capture region from the WoW window.
 - Transparent click-through overlay behavior and MetaEngine integration are reserved for later phases.
-
