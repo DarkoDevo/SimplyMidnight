@@ -55,10 +55,39 @@ function addon:GetCompatLayer()
         return action.SecretEngine.Compat
     end
 
+    local secretEngine = rawget(_G, "ActionSecretEngine")
+    if type(secretEngine) == "table" then
+        return secretEngine
+    end
+
+    return nil
+end
+
+function addon:GetNativeSecretEngine()
+    local compat = self:GetCompatLayer()
+    if compat and type(compat.NativeSecretEngine) == "table" then
+        return compat.NativeSecretEngine
+    end
+
+    local native = rawget(_G, "ActionSecretEngineNative")
+    if type(native) == "table" then
+        return native
+    end
+
+    local action = rawget(_G, "Action")
+    if type(action) == "table" and type(action.SecretEngineNative) == "table" then
+        return action.SecretEngineNative
+    end
+
     return nil
 end
 
 function addon:GetSecretEngine()
+    local native = self:GetNativeSecretEngine()
+    if native then
+        return native
+    end
+
     local compat = self:GetCompatLayer()
     if compat and type(compat) == "table" then
         return compat
@@ -257,25 +286,43 @@ function addon:TryActionUnitNumber(unitID, methodName, fallback, ...)
 end
 
 function addon:TrySecretEngineNumber(methodName, fallback, ...)
-    local secretEngine = self:GetSecretEngine()
-    if not secretEngine then
-        return fallback or 0, false
-    end
+    local requestedFallback = type(fallback) == "number" and fallback or 0
+    local engines = {
+        self:GetNativeSecretEngine(),
+        self:GetSecretEngine(),
+    }
 
-    local method = secretEngine[methodName]
-    if type(method) ~= "function" then
-        return fallback or 0, false
-    end
+    for _, secretEngine in ipairs(engines) do
+        if type(secretEngine) == "table" then
+            local method = secretEngine[methodName]
+            if type(method) == "function" then
+                local ok, first, second = pcall(method, secretEngine, ...)
+                if not ok then
+                    ok, first, second = pcall(method, ...)
+                end
 
-    local ok, raw = pcall(method, secretEngine, ...)
-    if not ok then
-        ok, raw = pcall(method, ...)
-        if not ok then
-            return fallback or 0, false
+                if ok then
+                    local raw = first
+                    if type(first) == "boolean" then
+                        if first then
+                            raw = second
+                        else
+                            raw = nil
+                        end
+                    end
+
+                    if raw ~= nil then
+                        local normalized, isKnown = self:TryUntaintNumber(raw, requestedFallback)
+                        if isKnown then
+                            return normalized, true
+                        end
+                    end
+                end
+            end
         end
     end
 
-    return self:TryUntaintNumber(raw, fallback)
+    return requestedFallback, false
 end
 
 function addon:Print(message)

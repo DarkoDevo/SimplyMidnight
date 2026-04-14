@@ -125,13 +125,13 @@ local function readUnitHealth(unitID)
     return tryActionHealth(unitID, current, max, pct, currentKnown, maxKnown, pctKnown)
 end
 
-local function tryActionPower(unitID, powerType, current, max, pct, currentKnown, maxKnown, pctKnown)
-    local usePrimaryPower = powerType == nil
+local function tryActionPower(unitID, powerType, current, max, pct, currentKnown, maxKnown, pctKnown, preferSecretFallback)
+    local allowFallback = preferSecretFallback == true
 
-    if usePrimaryPower and ((not pctKnown) or (not currentKnown) or (not maxKnown)) then
+    if allowFallback and ((not pctKnown) or (not currentKnown) or (not maxKnown)) then
         local fallbackPct, fallbackPctKnown = addon:TryActionUnitNumber(unitID, "PowerPercent", pct or 0)
         if not fallbackPctKnown then
-            fallbackPct, fallbackPctKnown = addon:TrySecretEngineNumber("GetPowerPercent", pct or 0, unitID)
+            fallbackPct, fallbackPctKnown = addon:TrySecretEngineNumber("GetPowerPercent", pct or 0, unitID, powerType)
         end
         if fallbackPctKnown then
             pct = math.max(0, math.min(fallbackPct or 0, 100))
@@ -140,7 +140,7 @@ local function tryActionPower(unitID, powerType, current, max, pct, currentKnown
 
         local fallbackCurrent, fallbackCurrentKnown = addon:TryActionUnitNumber(unitID, "Power", current or 0)
         if not fallbackCurrentKnown then
-            fallbackCurrent, fallbackCurrentKnown = addon:TrySecretEngineNumber("GetPower", current or 0, unitID)
+            fallbackCurrent, fallbackCurrentKnown = addon:TrySecretEngineNumber("GetPower", current or 0, unitID, powerType)
         end
         if fallbackCurrentKnown then
             current = fallbackCurrent
@@ -166,6 +166,7 @@ local function tryActionPower(unitID, powerType, current, max, pct, currentKnown
 end
 
 local function readPower(unitID, powerType)
+    local prefersSecretFallback = powerType == nil
     if powerType == nil then
         powerType = addon:UntaintNumber(protectedCall(UnitPowerType, unitID), 0)
     end
@@ -174,7 +175,7 @@ local function readPower(unitID, powerType)
     local max, maxKnown = addon:TryUntaintNumber(protectedCall(UnitPowerMax, unitID, powerType), 0)
     local pct = percentage(current, max)
     local pctKnown = currentKnown and maxKnown and max > 0
-    return tryActionPower(unitID, powerType, current, max, pct, currentKnown, maxKnown, pctKnown)
+    return tryActionPower(unitID, powerType, current, max, pct, currentKnown, maxKnown, pctKnown, prefersSecretFallback)
 end
 
 local function getMode()
