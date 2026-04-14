@@ -120,6 +120,34 @@ local function printDiagnostics()
                     end
                 end
             end
+
+            if primaryDebug.textPath then
+                addon:Print(string.format(
+                    "pwrtxt cur=%s max=%s txt=%s path=%s",
+                    fmt(primaryDebug.textCurrent),
+                    fmt(primaryDebug.textMax),
+                    tostring(primaryDebug.textRaw or "?"),
+                    tostring(primaryDebug.textPath)
+                ))
+            end
+
+            local textCandidates = primaryDebug.textCandidates
+            if type(textCandidates) == "table" then
+                for index = 1, math.min(3, #textCandidates) do
+                    local candidate = textCandidates[index]
+                    if type(candidate) == "table" then
+                        addon:Print(string.format(
+                            "pwrtxt%d score=%s cur=%s max=%s txt=%s path=%s",
+                            index,
+                            fmt(candidate.score),
+                            fmt(candidate.current),
+                            fmt(candidate.max),
+                            tostring(candidate.text or "?"),
+                            tostring(candidate.path or "?")
+                        ))
+                    end
+                end
+            end
         end
 
         if type(preAuraDebug) == "table" then

@@ -191,6 +191,45 @@ local explicitPlayerPowerBarPaths = {
     },
 }
 
+local explicitPlayerPowerTextPaths = {
+    {
+        label = "PlayerFrame.PlayerFrameContent.PlayerFrameContentMain.ManaBarArea.ManaBar.RightText",
+        segments = { "PlayerFrameContent", "PlayerFrameContentMain", "ManaBarArea", "ManaBar", "RightText" },
+        assumedMax = 100,
+        scoreBias = 180,
+    },
+    {
+        label = "PlayerFrame.PlayerFrameContent.PlayerFrameContentMain.ManaBarArea.ManaBar.ManaBarText",
+        segments = { "PlayerFrameContent", "PlayerFrameContentMain", "ManaBarArea", "ManaBar", "ManaBarText" },
+        assumedMax = 100,
+        scoreBias = 170,
+    },
+    {
+        label = "PlayerFrame.PlayerFrameContent.PlayerFrameContentMain.ManaBarArea.ManaBar.LeftText",
+        segments = { "PlayerFrameContent", "PlayerFrameContentMain", "ManaBarArea", "ManaBar", "LeftText" },
+        assumedMax = 100,
+        scoreBias = 160,
+    },
+    {
+        label = "PlayerFrameManaBarText",
+        globalName = "PlayerFrameManaBarText",
+        assumedMax = 100,
+        scoreBias = 160,
+    },
+    {
+        label = "PlayerFrameManaBarTextRight",
+        globalName = "PlayerFrameManaBarTextRight",
+        assumedMax = 100,
+        scoreBias = 150,
+    },
+    {
+        label = "PlayerFrameManaBarTextLeft",
+        globalName = "PlayerFrameManaBarTextLeft",
+        assumedMax = 100,
+        scoreBias = 140,
+    },
+}
+
 local function resolveNestedFrame(root, segments)
     local current = root
     for _, segment in ipairs(segments or {}) do
@@ -225,6 +264,135 @@ local function getExplicitPlayerPowerFrame(root, probe)
     end
 
     return resolveNestedFrame(root, probe.segments)
+end
+
+local function getExplicitPlayerPowerText(root, probe)
+    if type(probe) ~= "table" then
+        return nil
+    end
+
+    if type(probe.globalName) == "string" and probe.globalName ~= "" then
+        return rawget(_G, probe.globalName)
+    end
+
+    return resolveNestedFrame(root, probe.segments)
+end
+
+local function parseVisiblePowerText(text, assumedMax)
+    if type(text) ~= "string" then
+        return nil
+    end
+
+    local normalized = text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub(",", ""):gsub("%s+", " ")
+    normalized = normalized:match("^%s*(.-)%s*$")
+    if not normalized or normalized == "" then
+        return nil
+    end
+
+    local current, max = normalized:match("^(%d+)%s*/%s*(%d+)$")
+    if current and max then
+        current = tonumber(current)
+        max = tonumber(max)
+        if current and max and max > 0 then
+            return current, max, percentage(current, max), normalized
+        end
+    end
+
+    local pct = normalized:match("^(%d+)%%$")
+    if pct then
+        pct = tonumber(pct)
+        local fallbackMax = type(assumedMax) == "number" and assumedMax > 0 and assumedMax or 100
+        if pct then
+            pct = math.max(0, math.min(100, pct))
+            return math.floor((fallbackMax * pct / 100) + 0.5), fallbackMax, pct, normalized
+        end
+    end
+
+    local plain = normalized:match("^(%d+)$")
+    if plain then
+        plain = tonumber(plain)
+        local fallbackMax = type(assumedMax) == "number" and assumedMax > 0 and assumedMax or 100
+        if plain then
+            return math.max(0, plain), fallbackMax, percentage(plain, fallbackMax), normalized
+        end
+    end
+
+    return nil
+end
+
+local function buildPlayerPowerTextCandidate(fontString, path, assumedMax, scoreBias)
+    local fontType = type(fontString)
+    if fontType ~= "table" and fontType ~= "userdata" then
+        return nil
+    end
+
+    if type(fontString.GetText) ~= "function" then
+        return nil
+    end
+
+    if type(fontString.IsShown) == "function" and not addon:NormalizeBoolean(protectedCall(fontString.IsShown, fontString), false) then
+        return nil
+    end
+
+    local rawText = addon:NormalizeString(protectedCall(fontString.GetText, fontString))
+    local current, max, pct, normalized = parseVisiblePowerText(rawText, assumedMax)
+    if not current or not max or max <= 0 then
+        return nil
+    end
+
+    local score = type(scoreBias) == "number" and scoreBias or 0
+    local loweredPath = tostring(path or ""):lower()
+    if loweredPath:find("righttext", 1, true) then
+        score = score + 20
+    elseif loweredPath:find("manabartext", 1, true) then
+        score = score + 15
+    elseif loweredPath:find("lefttext", 1, true) then
+        score = score + 8
+    end
+
+    if normalized:find("/") then
+        score = score + 15
+    elseif normalized:find("%%") then
+        score = score + 10
+    else
+        score = score + 5
+    end
+
+    return {
+        current = current,
+        max = max,
+        pct = pct,
+        path = path,
+        score = score,
+        source = "text",
+        text = normalized,
+    }
+end
+
+local function getPlayerPowerTextSnapshot()
+    local root = rawget(_G, "PlayerFrame")
+    if type(root) ~= "table" and type(root) ~= "userdata" then
+        return nil, nil
+    end
+
+    local bestCandidate = nil
+    local candidates = {}
+    for _, probe in ipairs(explicitPlayerPowerTextPaths) do
+        local fontString = getExplicitPlayerPowerText(root, probe)
+        local candidate = buildPlayerPowerTextCandidate(fontString, probe.label, probe.assumedMax, probe.scoreBias)
+        if candidate then
+            candidates[#candidates + 1] = candidate
+            if not bestCandidate or (candidate.score or -999999) > (bestCandidate.score or -999999) then
+                bestCandidate = candidate
+            end
+        end
+    end
+
+    table.sort(candidates, function(left, right)
+        return (left.score or -999999) > (right.score or -999999)
+    end)
+
+    return bestCandidate, candidates
 end
 
 local function scorePlayerPowerBarCandidate(frame, path, minValue, maxValue, value, red, green, blue)
@@ -675,6 +843,19 @@ local function tryActionPower(unitID, powerType, current, max, pct, currentKnown
             end
 
             if not typedPowerSignal and not deficitPowerSignal then
+                local textSnapshot = getPlayerPowerTextSnapshot()
+                if textSnapshot and textSnapshot.max and textSnapshot.max > 0 then
+                    current = textSnapshot.current
+                    max = textSnapshot.max
+                    pct = textSnapshot.pct
+                    currentKnown = true
+                    maxKnown = true
+                    pctKnown = true
+                    typedPowerSignal = true
+                end
+            end
+
+            if not typedPowerSignal and not deficitPowerSignal then
                 local frameSnapshot = getPlayerPowerBarSnapshot()
                 if frameSnapshot and frameSnapshot.max and frameSnapshot.max > 0 then
                     current = frameSnapshot.current
@@ -806,6 +987,14 @@ local function getPlayerPrimaryPowerDebug(classTag, powerType)
     debug.frameWidth = frameSnapshot and frameSnapshot.width or nil
     debug.frameFillWidth = frameSnapshot and frameSnapshot.fillWidth or nil
     debug.frameCandidates = playerPowerBarCache.candidates
+
+    local textSnapshot, textCandidates = getPlayerPowerTextSnapshot()
+    debug.textCurrent = textSnapshot and textSnapshot.current or nil
+    debug.textMax = textSnapshot and textSnapshot.max or nil
+    debug.textPct = textSnapshot and textSnapshot.pct or nil
+    debug.textPath = textSnapshot and textSnapshot.path or nil
+    debug.textRaw = textSnapshot and textSnapshot.text or nil
+    debug.textCandidates = textCandidates
 
     local secretTyped, secretTypedKnown = addon:TrySecretEngineNumber("GetPower", 0, "player", powerType)
     debug.secretTyped = secretTypedKnown and secretTyped or nil
