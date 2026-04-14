@@ -9,20 +9,6 @@ local playerPowerBarCache = {
     candidates = nil,
 }
 
-local secondaryPowerByClass = {
-    DEATHKNIGHT = Enum and Enum.PowerType and Enum.PowerType.Runes or 5,
-    ROGUE = Enum and Enum.PowerType and Enum.PowerType.ComboPoints or 4,
-    DRUID = Enum and Enum.PowerType and Enum.PowerType.ComboPoints or 4,
-    MONK = Enum and Enum.PowerType and Enum.PowerType.Chi or 12,
-    PALADIN = Enum and Enum.PowerType and Enum.PowerType.HolyPower or 9,
-    WARLOCK = Enum and Enum.PowerType and Enum.PowerType.SoulShards or 7,
-    EVOKER = Enum and Enum.PowerType and Enum.PowerType.Essence or 19,
-    MAGE = Enum and Enum.PowerType and Enum.PowerType.ArcaneCharges or 16,
-}
-local primaryPowerByClass = {
-    DEATHKNIGHT = Enum and Enum.PowerType and Enum.PowerType.RunicPower or 6,
-}
-
 local function protectedCall(callback, ...)
     if type(callback) ~= "function" then
         return nil
@@ -1141,16 +1127,21 @@ function State:Refresh()
     local _, classTag = protectedCall(UnitClass, "player")
     classTag = addon:NormalizeString(classTag)
     local flags = addon:GetModeFlags()
+    local specIndex = type(GetSpecialization) == "function" and addon:UntaintNumber(protectedCall(GetSpecialization), 0) or 0
+    local specID = specIndex > 0 and addon:UntaintNumber(protectedCall(GetSpecializationInfo, specIndex), 0) or nil
+    local classProfile = addon.ClassProfiles and addon.ClassProfiles:Get(classTag, specID) or nil
+    local primaryDefinition = classProfile and classProfile.primary or nil
+    local secondaryDefinition = classProfile and classProfile.secondary or nil
 
     local playerCurrent, playerMax, playerPct, playerHealthKnown = readUnitHealth("player")
     local _, _, targetPct, targetHealthKnown = readUnitHealth("target")
-    local primaryType = primaryPowerByClass[classTag]
+    local primaryType = primaryDefinition and primaryDefinition.powerType or nil
     local primaryCurrent, primaryMax, primaryPct, primaryCurrentKnown, primaryPctKnown = readPower("player", primaryType)
     local primaryDebug = getPlayerPrimaryPowerDebug(classTag, primaryType)
 
-    local secondaryType = secondaryPowerByClass[classTag]
+    local secondaryType = secondaryDefinition and secondaryDefinition.powerType or nil
     local secondaryCurrent, secondaryMax, secondaryPct, secondaryCurrentKnown, secondaryPctKnown = 0, 0, 0, false, false
-    if classTag == "DEATHKNIGHT" then
+    if secondaryDefinition and secondaryDefinition.reader == "deathknight_runes" then
         secondaryCurrent, secondaryMax, secondaryPct, secondaryCurrentKnown, secondaryPctKnown = readDeathKnightRunes()
     elseif secondaryType ~= nil then
         secondaryCurrent, secondaryMax, secondaryPct, secondaryCurrentKnown, secondaryPctKnown = readPower("player", secondaryType)
@@ -1163,8 +1154,6 @@ function State:Refresh()
     local petAlive = petExists and not unitDead("pet")
     local rangeBucket = getRangeBucket()
     local castInfo = getTargetCastingInfo()
-    local specIndex = type(GetSpecialization) == "function" and addon:UntaintNumber(protectedCall(GetSpecialization), 0) or 0
-    local specID = specIndex > 0 and addon:UntaintNumber(protectedCall(GetSpecializationInfo, specIndex), 0) or nil
     local enemyCount = getVisibleEnemyCount()
     local moving = addon:UntaintNumber(protectedCall(GetUnitSpeed, "player"), 0) > 0
     local mounted = addon:NormalizeBoolean(protectedCall(IsMounted), false)
@@ -1177,6 +1166,7 @@ function State:Refresh()
         player = {
             class = classTag,
             specID = specID,
+            classProfile = classProfile and classProfile.id or nil,
             inCombat = inCombat,
             moving = moving,
             mounted = mounted,
@@ -1189,12 +1179,20 @@ function State:Refresh()
             primaryPct = primaryPct,
             primaryKnown = primaryCurrentKnown,
             primaryPctKnown = primaryPctKnown,
+            primaryResourceKey = primaryDefinition and primaryDefinition.key or "primary",
+            primaryResourceLabel = primaryDefinition and primaryDefinition.label or "Primary",
+            primaryResourceShortLabel = primaryDefinition and primaryDefinition.shortLabel or "PWR",
+            primaryPowerType = primaryType,
             primaryDebug = primaryDebug,
             secondaryCurrent = secondaryCurrent,
             secondaryMax = secondaryMax,
             secondaryPct = secondaryPct,
             secondaryKnown = secondaryCurrentKnown,
             secondaryPctKnown = secondaryPctKnown,
+            secondaryResourceKey = secondaryDefinition and secondaryDefinition.key or "secondary",
+            secondaryResourceLabel = secondaryDefinition and secondaryDefinition.label or "Secondary",
+            secondaryResourceShortLabel = secondaryDefinition and secondaryDefinition.shortLabel or "SEC",
+            secondaryPowerType = secondaryType,
             petExists = petExists,
             petAlive = petAlive,
         },

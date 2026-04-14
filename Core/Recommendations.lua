@@ -135,6 +135,22 @@ local function fail(reason)
     return false, reason
 end
 
+local function getPrimaryResourceLabel(state)
+    local label = state and state.player and state.player.primaryResourceLabel
+    if type(label) == "string" and label ~= "" then
+        return string.lower(label)
+    end
+    return "primary resource"
+end
+
+local function getSecondaryResourceLabel(state)
+    local label = state and state.player and state.player.secondaryResourceLabel
+    if type(label) == "string" and label ~= "" then
+        return string.lower(label)
+    end
+    return "secondary resource"
+end
+
 local function auraSpellMatches(requestedSpellID, actualSpellID)
     requestedSpellID = tonumber(requestedSpellID) or 0
     actualSpellID = tonumber(actualSpellID) or 0
@@ -546,67 +562,75 @@ local function matchesConditions(entry, state)
         end
     end
     if conditions.resourceAtLeast then
+        local primaryResourceLabel = getPrimaryResourceLabel(state)
         if not state.player.primaryKnown then
-            return fail("primary resource unknown")
+            return fail(primaryResourceLabel .. " unknown")
         end
         if state.player.primaryCurrent < conditions.resourceAtLeast then
-            return fail(string.format("resource %s < %s", shortNumber(state.player.primaryCurrent), shortNumber(conditions.resourceAtLeast)))
+            return fail(string.format("%s %s < %s", primaryResourceLabel, shortNumber(state.player.primaryCurrent), shortNumber(conditions.resourceAtLeast)))
         end
     end
     if conditions.resourceAtMost then
+        local primaryResourceLabel = getPrimaryResourceLabel(state)
         if not state.player.primaryKnown then
-            return fail("primary resource unknown")
+            return fail(primaryResourceLabel .. " unknown")
         end
         if state.player.primaryCurrent > conditions.resourceAtMost then
-            return fail(string.format("resource %s > %s", shortNumber(state.player.primaryCurrent), shortNumber(conditions.resourceAtMost)))
+            return fail(string.format("%s %s > %s", primaryResourceLabel, shortNumber(state.player.primaryCurrent), shortNumber(conditions.resourceAtMost)))
         end
     end
     if conditions.secondaryAtLeast then
+        local secondaryResourceLabel = getSecondaryResourceLabel(state)
         if not state.player.secondaryKnown then
-            return fail("secondary resource unknown")
+            return fail(secondaryResourceLabel .. " unknown")
         end
         if state.player.secondaryCurrent < conditions.secondaryAtLeast then
-            return fail(string.format("secondary %s < %s", shortNumber(state.player.secondaryCurrent), shortNumber(conditions.secondaryAtLeast)))
+            return fail(string.format("%s %s < %s", secondaryResourceLabel, shortNumber(state.player.secondaryCurrent), shortNumber(conditions.secondaryAtLeast)))
         end
     end
     if conditions.secondaryAtMost then
+        local secondaryResourceLabel = getSecondaryResourceLabel(state)
         if not state.player.secondaryKnown then
-            return fail("secondary resource unknown")
+            return fail(secondaryResourceLabel .. " unknown")
         end
         if state.player.secondaryCurrent > conditions.secondaryAtMost then
-            return fail(string.format("secondary %s > %s", shortNumber(state.player.secondaryCurrent), shortNumber(conditions.secondaryAtMost)))
+            return fail(string.format("%s %s > %s", secondaryResourceLabel, shortNumber(state.player.secondaryCurrent), shortNumber(conditions.secondaryAtMost)))
         end
     end
     if conditions.resourcePctAtLeast then
+        local primaryResourceLabel = getPrimaryResourceLabel(state)
         if not state.player.primaryPctKnown then
-            return fail("primary resource unknown")
+            return fail(primaryResourceLabel .. " unknown")
         end
         if state.player.primaryPct < conditions.resourcePctAtLeast then
-            return fail(string.format("resource%% %s < %s", shortNumber(state.player.primaryPct), shortNumber(conditions.resourcePctAtLeast)))
+            return fail(string.format("%s%% %s < %s", primaryResourceLabel, shortNumber(state.player.primaryPct), shortNumber(conditions.resourcePctAtLeast)))
         end
     end
     if conditions.resourcePctAtMost then
+        local primaryResourceLabel = getPrimaryResourceLabel(state)
         if not state.player.primaryPctKnown then
-            return fail("primary resource unknown")
+            return fail(primaryResourceLabel .. " unknown")
         end
         if state.player.primaryPct > conditions.resourcePctAtMost then
-            return fail(string.format("resource%% %s > %s", shortNumber(state.player.primaryPct), shortNumber(conditions.resourcePctAtMost)))
+            return fail(string.format("%s%% %s > %s", primaryResourceLabel, shortNumber(state.player.primaryPct), shortNumber(conditions.resourcePctAtMost)))
         end
     end
     if conditions.secondaryPctAtLeast then
+        local secondaryResourceLabel = getSecondaryResourceLabel(state)
         if not state.player.secondaryPctKnown then
-            return fail("secondary resource unknown")
+            return fail(secondaryResourceLabel .. " unknown")
         end
         if state.player.secondaryPct < conditions.secondaryPctAtLeast then
-            return fail(string.format("secondary%% %s < %s", shortNumber(state.player.secondaryPct), shortNumber(conditions.secondaryPctAtLeast)))
+            return fail(string.format("%s%% %s < %s", secondaryResourceLabel, shortNumber(state.player.secondaryPct), shortNumber(conditions.secondaryPctAtLeast)))
         end
     end
     if conditions.secondaryPctAtMost then
+        local secondaryResourceLabel = getSecondaryResourceLabel(state)
         if not state.player.secondaryPctKnown then
-            return fail("secondary resource unknown")
+            return fail(secondaryResourceLabel .. " unknown")
         end
         if state.player.secondaryPct > conditions.secondaryPctAtMost then
-            return fail(string.format("secondary%% %s > %s", shortNumber(state.player.secondaryPct), shortNumber(conditions.secondaryPctAtMost)))
+            return fail(string.format("%s%% %s > %s", secondaryResourceLabel, shortNumber(state.player.secondaryPct), shortNumber(conditions.secondaryPctAtMost)))
         end
     end
     if conditions.enemyCountAtLeast and (state.environment.enemyCount or 0) < conditions.enemyCountAtLeast then

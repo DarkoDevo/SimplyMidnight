@@ -281,7 +281,13 @@ function ExportHUD:GetDiagnosticLines(state, recommendations)
         string.format("pack=%s | spec=%s | mode=%s | enemies=%d", shortText(packLabel, 26), tostring(state.player.specID or "-"), tostring(state.mode or "-"), tonumber(state.environment.enemyCount) or 0),
         string.format("player c=%s mv=%s mt=%s pet=%s/%s | modes b=%s c=%s h=%s p=%s", shortBool(state.player.inCombat), shortBool(state.player.moving), shortBool(state.player.mounted), shortBool(state.player.petExists), shortBool(state.player.petAlive), shortBool(state.modes.burst), shortBool(state.modes.conserve), shortBool(state.modes.hold), shortBool(state.modes.pause)),
         string.format("target ex=%s al=%s ho=%s rg=%s cast=%s int=%s hp=%s [%s]", shortBool(state.target.exists), shortBool(state.target.alive), shortBool(state.target.hostile), tostring(state.target.rangeBucket or "-"), shortBool(state.target.casting), shortBool(state.target.interruptible), formatPct(state.target.healthPct, state.target.healthKnown), statusTag(state.target.healthKnown)),
-        string.format("self hp=%s [%s] | %s | %s", formatPct(state.player.healthPct, state.player.healthKnown), statusTag(state.player.healthKnown), formatResourceLine("pwr", state.player.primaryCurrent, state.player.primaryPct, state.player.primaryKnown, state.player.primaryPctKnown), formatResourceLine("sec", state.player.secondaryCurrent, state.player.secondaryPct, state.player.secondaryKnown, state.player.secondaryPctKnown)),
+        string.format(
+            "self hp=%s [%s] | %s | %s",
+            formatPct(state.player.healthPct, state.player.healthKnown),
+            statusTag(state.player.healthKnown),
+            formatResourceLine(state.player.primaryResourceShortLabel or "pwr", state.player.primaryCurrent, state.player.primaryPct, state.player.primaryKnown, state.player.primaryPctKnown),
+            formatResourceLine(state.player.secondaryResourceShortLabel or "sec", state.player.secondaryCurrent, state.player.secondaryPct, state.player.secondaryKnown, state.player.secondaryPctKnown)
+        ),
         table.concat(slotLine, " | "),
         table.concat(groupedReasonLines[1] or {}, " | "),
         table.concat(groupedReasonLines[2] or {}, " | "),
