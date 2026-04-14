@@ -94,6 +94,26 @@ local function printDiagnostics()
                     tostring(primaryDebug.framePath)
                 ))
             end
+
+            local frameCandidates = primaryDebug.frameCandidates
+            if type(frameCandidates) == "table" then
+                for index = 1, math.min(3, #frameCandidates) do
+                    local candidate = frameCandidates[index]
+                    if type(candidate) == "table" then
+                        addon:Print(string.format(
+                            "pwrui%d score=%s cur=%s max=%s rgb=%s/%s/%s path=%s",
+                            index,
+                            fmt(candidate.score),
+                            fmt(candidate.current),
+                            fmt(candidate.max),
+                            fmt(candidate.color and candidate.color.red and math.floor((candidate.color.red or 0) * 100 + 0.5) or 0),
+                            fmt(candidate.color and candidate.color.green and math.floor((candidate.color.green or 0) * 100 + 0.5) or 0),
+                            fmt(candidate.color and candidate.color.blue and math.floor((candidate.color.blue or 0) * 100 + 0.5) or 0),
+                            tostring(candidate.path or "?")
+                        ))
+                    end
+                end
+            end
         end
 
         if type(preAuraDebug) == "table" then

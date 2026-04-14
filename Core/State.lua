@@ -6,6 +6,7 @@ local State = {
 local playerPowerBarCache = {
     expiresAt = 0,
     snapshot = nil,
+    candidates = nil,
 }
 
 local secondaryPowerByClass = {
@@ -158,11 +159,19 @@ local function getFramePath(frame)
 end
 
 local function scorePlayerPowerBarCandidate(frame, path, minValue, maxValue, value, red, green, blue)
+    if maxValue <= 5 then
+        return -9999
+    end
+
     local score = 0
     path = tostring(path or "")
 
     if maxValue > 0 and maxValue <= 120 then
         score = score + 25
+    end
+
+    if maxValue >= 20 and maxValue <= 120 then
+        score = score + 20
     end
 
     if value >= minValue and value <= maxValue then
@@ -193,6 +202,9 @@ local function scorePlayerPowerBarCandidate(frame, path, minValue, maxValue, val
     if width >= 50 then
         score = score + 5
     end
+    if width < 20 then
+        score = score - 80
+    end
 
     return score
 end
@@ -205,6 +217,7 @@ local function getPlayerPowerBarSnapshot()
 
     playerPowerBarCache.expiresAt = currentTime + 0.2
     playerPowerBarCache.snapshot = nil
+    playerPowerBarCache.candidates = nil
 
     local root = rawget(_G, "PlayerFrame")
     if type(root) ~= "table" then
@@ -214,6 +227,7 @@ local function getPlayerPowerBarSnapshot()
     local queue = { root }
     local bestSnapshot = nil
     local bestScore = -999999
+    local candidates = {}
     local index = 1
 
     while queue[index] do
@@ -239,6 +253,20 @@ local function getPlayerPowerBarSnapshot()
                 blue = addon:UntaintNumber(blue, 0)
                 local path = getFramePath(frame)
                 local score = scorePlayerPowerBarCandidate(frame, path, minValue, maxValue, value, red, green, blue)
+                if score > -5000 then
+                    candidates[#candidates + 1] = {
+                        current = value,
+                        max = maxValue,
+                        pct = percentage(value, maxValue),
+                        path = path,
+                        score = score,
+                        color = {
+                            red = red,
+                            green = green,
+                            blue = blue,
+                        },
+                    }
+                end
                 if score > bestScore then
                     bestScore = score
                     bestSnapshot = {
@@ -252,6 +280,11 @@ local function getPlayerPowerBarSnapshot()
             end
         end
     end
+
+    table.sort(candidates, function(left, right)
+        return (left.score or -999999) > (right.score or -999999)
+    end)
+    playerPowerBarCache.candidates = candidates
 
     if bestSnapshot and bestSnapshot.score >= 40 then
         playerPowerBarCache.snapshot = bestSnapshot
@@ -531,6 +564,7 @@ local function getPlayerPrimaryPowerDebug(classTag, powerType)
     debug.frameCurrent = frameSnapshot and frameSnapshot.current or nil
     debug.frameMax = frameSnapshot and frameSnapshot.max or nil
     debug.framePath = frameSnapshot and frameSnapshot.path or nil
+    debug.frameCandidates = playerPowerBarCache.candidates
 
     local secretTyped, secretTypedKnown = addon:TrySecretEngineNumber("GetPower", 0, "player", powerType)
     debug.secretTyped = secretTypedKnown and secretTyped or nil
