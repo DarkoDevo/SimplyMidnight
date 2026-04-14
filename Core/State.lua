@@ -167,6 +167,12 @@ local function tryActionPower(unitID, powerType, current, max, pct, currentKnown
                 currentKnown = true
             end
 
+            local playerMax, playerMaxKnown = addon:TryActionPlayerNumber("RunicPowerMax", max or 0)
+            if playerMaxKnown and playerMax > 0 then
+                max = playerMax
+                maxKnown = true
+            end
+
             local playerPct, playerPctKnown = addon:TryActionPlayerNumber("RunicPowerPercentage", pct or 0)
             if playerPctKnown then
                 pct = math.max(0, math.min(playerPct or 0, 100))

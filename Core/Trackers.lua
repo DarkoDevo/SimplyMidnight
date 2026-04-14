@@ -131,6 +131,13 @@ function Trackers:RememberSpellForGUID(guid, spellID, durationSeconds)
     tracked[spellID] = math.max(tracked[spellID] or 0, expiresAt)
 end
 
+function Trackers:RememberSpellForUnit(unitID, spellID, durationSeconds)
+    local guid = unitGUID(unitID)
+    if guid then
+        self:RememberSpellForGUID(guid, spellID, durationSeconds)
+    end
+end
+
 function Trackers:ForgetSpellForGUID(guid, spellID)
     guid = addon:NormalizeString(guid)
     spellID = tonumber(spellID)

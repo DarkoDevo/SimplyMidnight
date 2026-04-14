@@ -157,6 +157,25 @@ local function getAuraCandidateSpellIDs(spellID)
     return { spellID }
 end
 
+local function rememberObservedAura(unitID, requestedSpellID, actualSpellID, duration, remaining)
+    if not unitID or not addon.Trackers or type(addon.Trackers.RememberSpellForUnit) ~= "function" then
+        return
+    end
+
+    local requestedID = tonumber(requestedSpellID) or 0
+    local actualID = tonumber(actualSpellID) or 0
+    if not OUTBREAK_DISEASE_ALIASES[requestedID] and not OUTBREAK_DISEASE_ALIASES[actualID] then
+        return
+    end
+
+    local rememberFor = math.max(tonumber(remaining) or 0, tonumber(duration) or 0, 0)
+    if rememberFor <= 0 then
+        return
+    end
+
+    addon.Trackers:RememberSpellForUnit(unitID, actualID > 0 and actualID or requestedID, rememberFor)
+end
+
 local function getAuraObject(unitID, index, filter)
     if type(C_UnitAuras) == "table" and type(C_UnitAuras.GetAuraDataByIndex) == "function" then
         local auraData = protectedCall(C_UnitAuras.GetAuraDataByIndex, unitID, index, filter)
@@ -233,6 +252,7 @@ local function tryActionAuraLookup(unitID, spellID, filter, sourceUnit)
                 }
 
                 if remain > 0 then
+                    rememberObservedAura(unitID, spellID, candidateSpellID, duration, remain)
                     return bestAura
                 end
             end
@@ -269,10 +289,13 @@ local function readAura(unitID, spellID, filter, sourceUnit)
                 if count <= 0 then
                     count = 1
                 end
+                local normalizedDuration = addon:UntaintNumber(auraData.duration, 0)
+
+                rememberObservedAura(unitID, spellID, normalizedSpellID, normalizedDuration, remaining)
 
                 return {
                     count = count,
-                    duration = addon:UntaintNumber(auraData.duration, 0),
+                    duration = normalizedDuration,
                     expirationTime = normalizedExpirationTime,
                     remaining = remaining,
                     source = sourceToken,
