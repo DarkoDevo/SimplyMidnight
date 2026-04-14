@@ -3,6 +3,10 @@ local _, addon = ...
 local State = {
     snapshot = {},
 }
+local playerPowerBarCache = {
+    expiresAt = 0,
+    snapshot = nil,
+}
 
 local secondaryPowerByClass = {
     DEATHKNIGHT = Enum and Enum.PowerType and Enum.PowerType.Runes or 5,
@@ -111,6 +115,149 @@ local function preferPositiveNumber(currentValue, currentKnown, candidateValue, 
     end
 
     return currentValue, currentKnown
+end
+
+local function getFrameLabel(frame)
+    if type(frame) ~= "table" then
+        return nil
+    end
+
+    local name = type(frame.GetName) == "function" and frame:GetName() or nil
+    if type(name) == "string" and name ~= "" then
+        return name
+    end
+
+    local objectType = type(frame.GetObjectType) == "function" and frame:GetObjectType() or nil
+    if type(objectType) == "string" and objectType ~= "" then
+        return objectType
+    end
+
+    return "frame"
+end
+
+local function getFramePath(frame)
+    if type(frame) ~= "table" then
+        return nil
+    end
+
+    local segments = {}
+    local current = frame
+    local guard = 0
+    while current and guard < 8 do
+        guard = guard + 1
+        segments[#segments + 1] = getFrameLabel(current)
+        current = type(current.GetParent) == "function" and current:GetParent() or nil
+    end
+
+    local path = {}
+    for index = #segments, 1, -1 do
+        path[#path + 1] = segments[index]
+    end
+
+    return table.concat(path, ".")
+end
+
+local function scorePlayerPowerBarCandidate(frame, path, minValue, maxValue, value, red, green, blue)
+    local score = 0
+    path = tostring(path or "")
+
+    if maxValue > 0 and maxValue <= 120 then
+        score = score + 25
+    end
+
+    if value >= minValue and value <= maxValue then
+        score = score + 10
+    end
+
+    if path:find("ManaBar", 1, true) or path:find("PowerBar", 1, true) or path:find("ManaBarArea", 1, true) or path:find("PowerBarArea", 1, true) then
+        score = score + 80
+    end
+
+    if path:find("PlayerFrame", 1, true) then
+        score = score + 20
+    end
+
+    if path:find("Health", 1, true) then
+        score = score - 120
+    end
+
+    if path:find("Cast", 1, true) or path:find("Mirror", 1, true) or path:find("Alt", 1, true) then
+        score = score - 40
+    end
+
+    if blue and blue > (red or 0) and blue > (green or 0) then
+        score = score + 8
+    end
+
+    local width = addon:UntaintNumber(protectedCall(frame.GetWidth, frame), 0)
+    if width >= 50 then
+        score = score + 5
+    end
+
+    return score
+end
+
+local function getPlayerPowerBarSnapshot()
+    local currentTime = type(GetTime) == "function" and GetTime() or 0
+    if playerPowerBarCache.snapshot and playerPowerBarCache.expiresAt > currentTime then
+        return playerPowerBarCache.snapshot
+    end
+
+    playerPowerBarCache.expiresAt = currentTime + 0.2
+    playerPowerBarCache.snapshot = nil
+
+    local root = rawget(_G, "PlayerFrame")
+    if type(root) ~= "table" then
+        return nil
+    end
+
+    local queue = { root }
+    local bestSnapshot = nil
+    local bestScore = -999999
+    local index = 1
+
+    while queue[index] do
+        local frame = queue[index]
+        index = index + 1
+
+        if type(frame.GetChildren) == "function" then
+            local children = { frame:GetChildren() }
+            for childIndex = 1, #children do
+                queue[#queue + 1] = children[childIndex]
+            end
+        end
+
+        if type(frame.GetObjectType) == "function" and frame:GetObjectType() == "StatusBar" and addon:NormalizeBoolean(protectedCall(frame.IsShown, frame), false) then
+            local value = addon:UntaintNumber(protectedCall(frame.GetValue, frame), -1)
+            local minValue, maxValue = protectedCall(frame.GetMinMaxValues, frame)
+            minValue = addon:UntaintNumber(minValue, 0)
+            maxValue = addon:UntaintNumber(maxValue, 0)
+            if value >= 0 and maxValue > minValue then
+                local red, green, blue = protectedCall(frame.GetStatusBarColor, frame)
+                red = addon:UntaintNumber(red, 0)
+                green = addon:UntaintNumber(green, 0)
+                blue = addon:UntaintNumber(blue, 0)
+                local path = getFramePath(frame)
+                local score = scorePlayerPowerBarCandidate(frame, path, minValue, maxValue, value, red, green, blue)
+                if score > bestScore then
+                    bestScore = score
+                    bestSnapshot = {
+                        current = value,
+                        max = maxValue,
+                        pct = percentage(value, maxValue),
+                        path = path,
+                        score = score,
+                    }
+                end
+            end
+        end
+    end
+
+    if bestSnapshot and bestSnapshot.score >= 40 then
+        playerPowerBarCache.snapshot = bestSnapshot
+    end
+
+    return playerPowerBarCache.snapshot
 end
 
 local function tryActionHealth(unitID, current, max, pct, currentKnown, maxKnown, pctKnown)
@@ -226,32 +373,46 @@ local function tryActionPower(unitID, powerType, current, max, pct, currentKnown
             if actionUntypedDeficitKnown then
                 local deficitBaseMax = (maxKnown and max and max > 0) and max or 100
                 local derivedCurrent = math.max(0, deficitBaseMax - math.max(0, tonumber(actionUntypedDeficit) or 0))
-                if not typedPowerSignal then
+                local providesSignal = (tonumber(actionUntypedDeficit) or 0) < deficitBaseMax
+                if providesSignal and not typedPowerSignal then
                     current = derivedCurrent
                     currentKnown = true
                     pct = percentage(derivedCurrent, deficitBaseMax)
                     pctKnown = true
-                else
+                elseif providesSignal then
                     current, currentKnown = preferPositiveNumber(current, currentKnown, derivedCurrent, true)
                     pct, pctKnown = preferPositiveNumber(pct, pctKnown, percentage(derivedCurrent, deficitBaseMax), true)
                 end
-                deficitPowerSignal = true
+                deficitPowerSignal = deficitPowerSignal or providesSignal
             end
 
             local actionUntypedDeficitPct, actionUntypedDeficitPctKnown = addon:TryActionUnitNumber(unitID, "PowerDeficitPercent", 0)
             if actionUntypedDeficitPctKnown then
                 local derivedPct = math.max(0, math.min(100, 100 - (tonumber(actionUntypedDeficitPct) or 0)))
-                if not typedPowerSignal then
+                local providesSignal = derivedPct > 0
+                if providesSignal and not typedPowerSignal then
                     pct = derivedPct
                     pctKnown = true
                     if maxKnown and max and max > 0 then
                         current = math.floor((max * derivedPct / 100) + 0.5)
                         currentKnown = true
                     end
-                else
+                elseif providesSignal then
                     pct, pctKnown = preferPositiveNumber(pct, pctKnown, derivedPct, true)
                 end
-                deficitPowerSignal = true
+                deficitPowerSignal = deficitPowerSignal or providesSignal
+            end
+
+            if not typedPowerSignal and not deficitPowerSignal then
+                local frameSnapshot = getPlayerPowerBarSnapshot()
+                if frameSnapshot and frameSnapshot.max and frameSnapshot.max > 0 then
+                    current = frameSnapshot.current
+                    max = frameSnapshot.max
+                    pct = frameSnapshot.pct
+                    currentKnown = true
+                    maxKnown = true
+                    pctKnown = true
+                end
             end
 
             local secretUntypedPct, secretUntypedPctKnown = addon:TrySecretEngineNumber("GetPowerPercent", pct or 0, unitID)
@@ -365,6 +526,11 @@ local function getPlayerPrimaryPowerDebug(classTag, powerType)
 
     local actionUnitDeficit, actionUnitDeficitKnown = addon:TryActionUnitNumber("player", "PowerDeficit", 0)
     debug.actionUnitDeficit = actionUnitDeficitKnown and actionUnitDeficit or nil
+
+    local frameSnapshot = getPlayerPowerBarSnapshot()
+    debug.frameCurrent = frameSnapshot and frameSnapshot.current or nil
+    debug.frameMax = frameSnapshot and frameSnapshot.max or nil
+    debug.framePath = frameSnapshot and frameSnapshot.path or nil
 
     local secretTyped, secretTypedKnown = addon:TrySecretEngineNumber("GetPower", 0, "player", powerType)
     debug.secretTyped = secretTypedKnown and secretTyped or nil

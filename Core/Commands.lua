@@ -85,6 +85,15 @@ local function printDiagnostics()
                 fmt(primaryDebug.secretTyped),
                 fmt(primaryDebug.secretUntyped)
             ))
+
+            if primaryDebug.framePath then
+                addon:Print(string.format(
+                    "pwrui cur=%s max=%s path=%s",
+                    fmt(primaryDebug.frameCurrent),
+                    fmt(primaryDebug.frameMax),
+                    tostring(primaryDebug.framePath)
+                ))
+            end
         end
 
         if type(preAuraDebug) == "table" then
