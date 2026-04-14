@@ -17,6 +17,15 @@
 - Provide a stable spell-icon surface that GGL can read
 - Leave clean adapter seams for future TMW / Action / MetaEngine integration
 
+## Compatibility Strategy
+
+- `SimplyMidnight` now publishes a versioned public bridge snapshot at `_G.SimplyMidnightBridge`.
+- The bridge snapshot is capability-probed, not hard-wired to one Action or GGLoader implementation.
+- Adapter integration is read-only and version-tolerant: we detect features like toggles, secret runtime pieces, or future MetaEngine surfaces when they exist, and fall back cleanly when they do not.
+- Export configuration is also published through the bridge snapshot so future readers can adapt to HUD position, lock state, scale, and protocol version without scraping hard-coded assumptions.
+- Blizzard-facing APIs are tracked through a compatibility module, which records available APIs, current build/interface info, and risk flags when important APIs disappear or taint incidents are observed.
+- The design goal is that Action / GGLoader can change their Midnight fix independently, and `SimplyMidnight` can adapt through capability negotiation instead of being coupled to one exact implementation.
+
 ## Layout
 
 - `SimplyMidnight.toc` and `*.lua` files are the live WoW addon

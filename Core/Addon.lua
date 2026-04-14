@@ -66,6 +66,7 @@ function addon:SetTimedMode(modeName, seconds)
     seconds = tonumber(seconds) or 0
     local key = modeName .. "Until"
     self.session[key] = now() + math.max(seconds, 0)
+    self:NotifyCompatibilityChanged()
 end
 
 function addon:SetToggleMode(modeName, value)
@@ -78,6 +79,8 @@ function addon:SetToggleMode(modeName, value)
     elseif modeName == "conserve" or modeName == "pause" then
         self.db.modes[modeName] = self.session[modeName]
     end
+
+    self:NotifyCompatibilityChanged()
 end
 
 function addon:ToggleMode(modeName)
@@ -145,9 +148,18 @@ function addon:SafeCall(moduleName, callback, ...)
     return unpackCompat(results, 2)
 end
 
+function addon:NotifyCompatibilityChanged()
+    if self.Compatibility and self.Compatibility.Refresh then
+        self.Compatibility:Refresh()
+    end
+end
+
 function addon:InitializeModules()
     if self.TaintGuard and self.TaintGuard.Initialize then
         self.TaintGuard:Initialize()
+    end
+    if self.Compatibility and self.Compatibility.Initialize then
+        self.Compatibility:Initialize()
     end
     if self.Registry and self.Registry.Initialize then
         self.Registry:Initialize()
@@ -171,6 +183,7 @@ function addon:InitializeModules()
         self.ExportHUD:Initialize()
         self.ExportHUD:Start()
     end
+    self:NotifyCompatibilityChanged()
 end
 
 local bootstrapFrame = CreateFrame("Frame")

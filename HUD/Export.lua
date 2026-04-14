@@ -39,6 +39,7 @@ function ExportHUD:SavePosition()
     addon.db.hud.relativePoint = relativePoint
     addon.db.hud.x = math.floor(xOfs)
     addon.db.hud.y = math.floor(yOfs)
+    addon:NotifyCompatibilityChanged()
 end
 
 function ExportHUD:ApplyPosition()
@@ -57,6 +58,7 @@ function ExportHUD:SetLocked(locked)
     addon.db.hud.locked = locked and true or false
     self.frame:EnableMouse(not addon.db.hud.locked)
     self.dragHint:SetShown(not addon.db.hud.locked)
+    addon:NotifyCompatibilityChanged()
 end
 
 function ExportHUD:ToggleLocked()
@@ -234,10 +236,11 @@ function ExportHUD:Render(state, recommendations)
     setBar(self.resourceBar, state.player.primaryPct)
 
     if addon.session.debug then
+        local compatStatus = addon.Compatibility and addon.Compatibility:GetStatusLine() or "compat: unavailable"
         local adapterStatus = addon.SimplyGladAdapter and addon.SimplyGladAdapter:GetStatusLine() or "adapter: unavailable"
         local taintStatus = addon.TaintGuard and addon.TaintGuard:GetStatusLine() or "taint: unavailable"
         local packLabel = addon.Registry and addon.Registry:GetCurrentPackLabel() or "unknown pack"
-        self.debugText:SetText(string.format("%s | enemies=%d | %s | %s", packLabel, state.environment.enemyCount or 0, adapterStatus, taintStatus))
+        self.debugText:SetText(string.format("%s | enemies=%d | %s | %s | %s", packLabel, state.environment.enemyCount or 0, compatStatus, adapterStatus, taintStatus))
         self.debugText:Show()
     else
         self.debugText:Hide()

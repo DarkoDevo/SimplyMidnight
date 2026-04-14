@@ -18,13 +18,32 @@ local function printHelp()
     addon:Print("Commands: /sm help | /sm config | /sm burst [seconds] | /sm hold [seconds]")
     addon:Print("/sm conserve on|off|toggle | /sm pause on|off|toggle | /sm debug on|off")
     addon:Print("/sm overlay on|off | /sm hud lock|unlock | /sm add <spellID> [slot] [priority] | /sm list")
-    addon:Print("/sm defaults | /sm reset")
+    addon:Print("/sm defaults | /sm reset | /sm compat")
 end
 
 local function printRegistry()
     for index, entry in ipairs(addon.Registry:GetAll()) do
         local spellName = addon:GetSpellName(entry.spellID) or tostring(entry.spellID)
         addon:Print(string.format("%d. %s | slot=%s | prio=%d | spec=%s | enabled=%s", index, spellName, entry.slot, entry.priority, tostring(entry.specID or "-"), tostring(entry.enabled)))
+    end
+end
+
+local function printCompatibility()
+    local snapshot = addon.Compatibility and addon.Compatibility:GetSnapshot() or nil
+    if not snapshot then
+        addon:Print("Compatibility snapshot unavailable")
+        return
+    end
+
+    addon:Print(string.format("Compat: protocol=%s | export=%s | risks=%d", snapshot.protocolVersion, snapshot.export.protocolVersion, #snapshot.riskFlags))
+    addon:Print(string.format("WoW: version=%s | build=%s | interface=%s", tostring(snapshot.wow.version), tostring(snapshot.wow.build), tostring(snapshot.wow.interface)))
+    addon:Print(string.format("APIs: aura=%s range=%s nameplates=%s cspell=%s", tostring(snapshot.api.unitAura), tostring(snapshot.api.spellRange), tostring(snapshot.api.nameplates), tostring(snapshot.api.cSpell)))
+
+    local adapter = snapshot.adapters and snapshot.adapters.simplyglad or nil
+    if adapter and adapter.loaded then
+        addon:Print(string.format("SimplyGlad: mode=%s | profile=%s | secret=%s | meta=%s", tostring(adapter.compatibilityMode), tostring(adapter.profile or "-"), tostring(adapter.capabilities and adapter.capabilities.secretEngine or false), tostring(adapter.capabilities and adapter.capabilities.metaEngine or false)))
+    else
+        addon:Print("SimplyGlad: not detected")
     end
 end
 
@@ -103,6 +122,8 @@ function Commands:Initialize()
             refreshConfigIfShown()
         elseif command == "list" then
             printRegistry()
+        elseif command == "compat" then
+            printCompatibility()
         else
             addon:Print("Unknown command: " .. tostring(command))
             printHelp()
