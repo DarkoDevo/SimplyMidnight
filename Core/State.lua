@@ -180,6 +180,7 @@ local function tryActionPower(unitID, powerType, current, max, pct, currentKnown
     local preferPositiveSignal = unitID == "player" and powerType ~= nil
     local runicPowerType = (Enum and Enum.PowerType and Enum.PowerType.RunicPower or 6)
     local typedPowerSignal = currentKnown or pctKnown
+    local deficitPowerSignal = false
 
     if allowFallback and ((not pctKnown) or (not currentKnown) or (not maxKnown)) then
         if unitID == "player" and powerType == runicPowerType then
@@ -199,19 +200,6 @@ local function tryActionPower(unitID, powerType, current, max, pct, currentKnown
                 pct, pctKnown = preferPositiveNumber(pct, pctKnown, playerPct, playerPctKnown)
             end
             typedPowerSignal = typedPowerSignal or playerPctKnown
-
-            local playerDeficit, playerDeficitKnown = addon:TryActionPlayerNumber("RunicPowerDeficit", 0)
-            if playerDeficitKnown then
-                if not maxKnown or (max or 0) <= 0 then
-                    max = 100
-                    maxKnown = true
-                end
-
-                local derivedCurrent = math.max(0, (max or 100) - math.max(0, tonumber(playerDeficit) or 0))
-                current, currentKnown = preferPositiveNumber(current, currentKnown, derivedCurrent, true)
-                pct, pctKnown = preferPositiveNumber(pct, pctKnown, percentage(derivedCurrent, max or 100), true)
-                typedPowerSignal = true
-            end
 
             local rawUntypedCurrent, rawUntypedCurrentKnown = addon:TryUntaintNumber(protectedCall(UnitPower, unitID), 0)
             current, currentKnown = preferPositiveNumber(current, currentKnown, rawUntypedCurrent, rawUntypedCurrentKnown)
@@ -247,6 +235,7 @@ local function tryActionPower(unitID, powerType, current, max, pct, currentKnown
                     current, currentKnown = preferPositiveNumber(current, currentKnown, derivedCurrent, true)
                     pct, pctKnown = preferPositiveNumber(pct, pctKnown, percentage(derivedCurrent, deficitBaseMax), true)
                 end
+                deficitPowerSignal = true
             end
 
             local actionUntypedDeficitPct, actionUntypedDeficitPctKnown = addon:TryActionUnitNumber(unitID, "PowerDeficitPercent", 0)
@@ -262,6 +251,7 @@ local function tryActionPower(unitID, powerType, current, max, pct, currentKnown
                 else
                     pct, pctKnown = preferPositiveNumber(pct, pctKnown, derivedPct, true)
                 end
+                deficitPowerSignal = true
             end
 
             local secretUntypedPct, secretUntypedPctKnown = addon:TrySecretEngineNumber("GetPowerPercent", pct or 0, unitID)
@@ -276,7 +266,7 @@ local function tryActionPower(unitID, powerType, current, max, pct, currentKnown
                 maxKnown = true
             end
 
-            if not typedPowerSignal and currentKnown and (tonumber(current) or 0) <= 0 and pctKnown and (tonumber(pct) or 0) <= 0 then
+            if not typedPowerSignal and not deficitPowerSignal and currentKnown and (tonumber(current) or 0) <= 0 and pctKnown and (tonumber(pct) or 0) <= 0 then
                 currentKnown = false
                 pctKnown = false
                 current = 0
