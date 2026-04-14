@@ -141,7 +141,20 @@ local specOverrides = {
         name = "Unholy Death Knight",
         rangeStyle = "melee",
         petClass = true,
-        primary = resource(PowerType.RunicPower or 6, "runic_power", "Runic Power", "RP"),
+        primary = mergeTables(resource(PowerType.RunicPower or 6, "runic_power", "Runic Power", "RP"), {
+            estimate = {
+                id = "deathknight_runic_power",
+                max = 100,
+                defaultCurrent = 0,
+                resetOutOfCombat = true,
+                generationPerSecondarySpend = 10,
+                spenderSpells = {
+                    [47541] = { cost = 40, freeBuffSpellID = 81340 },
+                    [207317] = { cost = 30 },
+                    [49998] = { cost = 35 },
+                },
+            },
+        }),
         secondary = resource(PowerType.Runes or 5, "runes", "Runes", "Runes", "deathknight_runes"),
     }),
     [253] = buildProfile("hunter-beastmastery", {

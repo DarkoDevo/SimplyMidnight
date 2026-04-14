@@ -6,6 +6,7 @@ local Trackers = {
     lastObservedOutbreakSinceLastCast = math.huge,
     lastObservedOutbreakCastAt = 0,
     lastObservedOutbreakTargetGUID = nil,
+    resourceEstimates = {},
 }
 
 local OUTBREAK_SPELL_ID = 77575
@@ -45,6 +46,78 @@ end
 
 local function unitIsUnit(leftUnitID, rightUnitID)
     return addon:NormalizeBoolean(protectedCall(UnitIsUnit, leftUnitID, rightUnitID), false)
+end
+
+local function clamp(value, minimum, maximum)
+    value = tonumber(value) or 0
+    minimum = tonumber(minimum) or 0
+    maximum = tonumber(maximum) or minimum
+    if value < minimum then
+        return minimum
+    end
+    if value > maximum then
+        return maximum
+    end
+    return value
+end
+
+local function percentage(current, maximum)
+    current = tonumber(current)
+    maximum = tonumber(maximum)
+    if not current or not maximum or maximum <= 0 then
+        return 0
+    end
+
+    return clamp((current / maximum) * 100, 0, 100)
+end
+
+local function getAuraObject(unitID, index, filter)
+    if type(C_UnitAuras) == "table" and type(C_UnitAuras.GetAuraDataByIndex) == "function" then
+        local auraData = protectedCall(C_UnitAuras.GetAuraDataByIndex, unitID, index, filter)
+        return addon:NormalizeAuraData(auraData)
+    end
+
+    if type(UnitAura) == "function" then
+        local name, icon, count, dispelType, duration, expirationTime, sourceUnit, isStealable, nameplateShowPersonal, spellId, canApplyAura, isBossAura = protectedCall(UnitAura, unitID, index, filter)
+        if name == nil and spellId == nil then
+            return nil
+        end
+
+        return addon:NormalizeAuraData({
+            name = name,
+            icon = icon,
+            applications = count,
+            dispelName = dispelType,
+            duration = duration,
+            expirationTime = expirationTime,
+            sourceUnit = sourceUnit,
+            isStealable = isStealable,
+            nameplateShowPersonal = nameplateShowPersonal,
+            spellId = spellId,
+            canApplyAura = canApplyAura,
+            isBossAura = isBossAura,
+        })
+    end
+
+    return nil
+end
+
+local function unitHasAura(unitID, spellID, filter)
+    if not unitID or not spellID then
+        return false
+    end
+
+    for index = 1, 40 do
+        local auraData = getAuraObject(unitID, index, filter)
+        if auraData then
+            local auraSpellID = addon:UntaintNumber(auraData.spellId or auraData.spellID, 0)
+            if auraSpellID == tonumber(spellID) then
+                return true
+            end
+        end
+    end
+
+    return false
 end
 
 local function isOutbreakDiseaseSpell(spellID)
@@ -115,6 +188,104 @@ function Trackers:Initialize()
     self.lastObservedOutbreakSinceLastCast = math.huge
     self.lastObservedOutbreakCastAt = 0
     self.lastObservedOutbreakTargetGUID = nil
+    self.resourceEstimates = {}
+end
+
+function Trackers:GetEstimatedPrimaryResource(config, hints)
+    if type(config) ~= "table" or not config.id then
+        return nil
+    end
+
+    hints = type(hints) == "table" and hints or {}
+    local estimate = self.resourceEstimates[config.id]
+    if type(estimate) ~= "table" then
+        estimate = {
+            current = tonumber(config.defaultCurrent) or 0,
+            max = tonumber(config.max) or 100,
+            known = false,
+            lastSecondaryCurrent = nil,
+            spenderSinceLastCast = {},
+            spenderBuffState = {},
+            debug = {},
+        }
+        self.resourceEstimates[config.id] = estimate
+    end
+
+    local maxValue = tonumber(config.max) or estimate.max or 100
+    estimate.max = maxValue
+
+    local inCombat = hints.inCombat == true
+    local secondaryCurrent = tonumber(hints.secondaryCurrent)
+    local rawCurrent = tonumber(hints.rawCurrent)
+    local rawKnown = hints.rawKnown == true
+
+    if rawKnown then
+        estimate.current = clamp(rawCurrent, 0, maxValue)
+        estimate.known = true
+    elseif config.resetOutOfCombat and not inCombat then
+        estimate.current = clamp(config.defaultCurrent or 0, 0, maxValue)
+        estimate.known = true
+    else
+        local generated = 0
+        if secondaryCurrent and estimate.lastSecondaryCurrent ~= nil and secondaryCurrent < estimate.lastSecondaryCurrent then
+            local spentSecondary = estimate.lastSecondaryCurrent - secondaryCurrent
+            local perSpend = tonumber(config.generationPerSecondarySpend) or 0
+            generated = math.max(0, spentSecondary) * perSpend
+            if generated > 0 then
+                estimate.current = clamp((estimate.current or 0) + generated, 0, maxValue)
+                estimate.known = true
+            end
+        end
+
+        local spent = 0
+        for spellID, spellConfig in pairs(config.spenderSpells or {}) do
+            local sinceLastCast = getActionSpellTimeSinceLastCast(spellID)
+            local previousSinceLastCast = estimate.spenderSinceLastCast[spellID] or math.huge
+            local previousBuffActive = estimate.spenderBuffState[spellID] == true
+            local observedCast = false
+
+            if sinceLastCast ~= math.huge and sinceLastCast <= 10 then
+                if previousSinceLastCast == math.huge then
+                    observedCast = sinceLastCast <= 0.4
+                else
+                    observedCast = sinceLastCast + 0.2 < previousSinceLastCast
+                end
+            end
+
+            if observedCast then
+                local spellCost = tonumber(spellConfig.cost) or 0
+                if spellConfig.freeBuffSpellID and previousBuffActive then
+                    spellCost = 0
+                end
+                if spellCost > 0 then
+                    spent = spent + spellCost
+                    estimate.current = clamp((estimate.current or 0) - spellCost, 0, maxValue)
+                    estimate.known = true
+                end
+            end
+
+            estimate.spenderSinceLastCast[spellID] = sinceLastCast
+            estimate.spenderBuffState[spellID] = spellConfig.freeBuffSpellID and unitHasAura("player", spellConfig.freeBuffSpellID, "HELPFUL") or false
+        end
+
+        estimate.debug = {
+            generated = generated,
+            spent = spent,
+        }
+    end
+
+    if secondaryCurrent ~= nil then
+        estimate.lastSecondaryCurrent = secondaryCurrent
+    end
+
+    return {
+        current = clamp(estimate.current or 0, 0, maxValue),
+        max = maxValue,
+        pct = percentage(estimate.current or 0, maxValue),
+        known = estimate.known == true,
+        estimated = true,
+        debug = estimate.debug,
+    }
 end
 
 function Trackers:RememberSpellForGUID(guid, spellID, durationSeconds)

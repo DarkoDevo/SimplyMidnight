@@ -1258,6 +1258,8 @@ function State:Refresh()
     local classProfile = addon.ClassProfiles and addon.ClassProfiles:Get(classTag, specID) or nil
     local primaryDefinition = classProfile and classProfile.primary or nil
     local secondaryDefinition = classProfile and classProfile.secondary or nil
+    local inCombat = addon:NormalizeBoolean(protectedCall(UnitAffectingCombat, "player"), false)
+        or addon:NormalizeBoolean(protectedCall(InCombatLockdown), false)
 
     local playerCurrent, playerMax, playerPct, playerHealthKnown = readUnitHealth("player")
     local _, _, targetPct, targetHealthKnown = readUnitHealth("target")
@@ -1273,6 +1275,34 @@ function State:Refresh()
         secondaryCurrent, secondaryMax, secondaryPct, secondaryCurrentKnown, secondaryPctKnown = readPower("player", secondaryType)
     end
 
+    local primaryEstimated = false
+    local primaryEstimateConfig = primaryDefinition and primaryDefinition.estimate or nil
+    local primaryEstimate = addon.Trackers and addon.Trackers.GetEstimatedPrimaryResource and addon.Trackers:GetEstimatedPrimaryResource(primaryEstimateConfig, {
+        inCombat = inCombat,
+        secondaryCurrent = secondaryCurrentKnown and secondaryCurrent or nil,
+        rawCurrent = primaryCurrent,
+        rawKnown = primaryCurrentKnown,
+    }) or nil
+
+    if primaryEstimate and primaryEstimate.known and not primaryCurrentKnown then
+        primaryCurrent = primaryEstimate.current
+        primaryMax = primaryEstimate.max
+        primaryPct = primaryEstimate.pct
+        primaryCurrentKnown = true
+        primaryPctKnown = true
+        primaryEstimated = true
+    end
+
+    if type(primaryDebug) == "table" then
+        primaryDebug.estimatedCurrent = primaryEstimate and primaryEstimate.current or nil
+        primaryDebug.estimatedMax = primaryEstimate and primaryEstimate.max or nil
+        primaryDebug.estimatedPct = primaryEstimate and primaryEstimate.pct or nil
+        primaryDebug.estimatedKnown = primaryEstimate and primaryEstimate.known == true or false
+        primaryDebug.estimatedActive = primaryEstimated
+        primaryDebug.estimatedGenerated = primaryEstimate and primaryEstimate.debug and primaryEstimate.debug.generated or nil
+        primaryDebug.estimatedSpent = primaryEstimate and primaryEstimate.debug and primaryEstimate.debug.spent or nil
+    end
+
     local targetExists = unitExists("target")
     local targetAlive = targetExists and not unitDead("target")
     local targetHostile = targetExists and unitCanAttack("player", "target") or false
@@ -1283,8 +1313,6 @@ function State:Refresh()
     local enemyCount = getVisibleEnemyCount()
     local moving = addon:UntaintNumber(protectedCall(GetUnitSpeed, "player"), 0) > 0
     local mounted = addon:NormalizeBoolean(protectedCall(IsMounted), false)
-    local inCombat = addon:NormalizeBoolean(protectedCall(UnitAffectingCombat, "player"), false)
-        or addon:NormalizeBoolean(protectedCall(InCombatLockdown), false)
 
     self.snapshot = {
         updatedAt = GetTime(),
@@ -1305,6 +1333,7 @@ function State:Refresh()
             primaryPct = primaryPct,
             primaryKnown = primaryCurrentKnown,
             primaryPctKnown = primaryPctKnown,
+            primaryEstimated = primaryEstimated,
             primaryResourceKey = primaryDefinition and primaryDefinition.key or "primary",
             primaryResourceLabel = primaryDefinition and primaryDefinition.label or "Primary",
             primaryResourceShortLabel = primaryDefinition and primaryDefinition.shortLabel or "PWR",

@@ -68,7 +68,10 @@ local function compactStatusText(value, options)
     return shortText(value, options.limit or 28)
 end
 
-local function statusTag(isKnown)
+local function statusTag(isKnown, isEstimated)
+    if isEstimated then
+        return "EST"
+    end
     return isKnown and "OK" or "UNK"
 end
 
@@ -81,24 +84,24 @@ local function formatPct(value, isKnown)
     return string.format("%.1f%%", value)
 end
 
-local function formatResourceLine(label, current, pct, currentKnown, pctKnown)
+local function formatResourceLine(label, current, pct, currentKnown, pctKnown, estimated)
     if currentKnown and pctKnown then
-        return string.format("%s=%s (%d) [%s]", label, formatPct(pct, true), tonumber(current) or 0, statusTag(true))
+        return string.format("%s=%s (%d) [%s]", label, formatPct(pct, true), tonumber(current) or 0, statusTag(true, estimated))
     end
 
     if currentKnown then
-        return string.format("%s=? (%d) [%s]", label, tonumber(current) or 0, statusTag(true))
+        return string.format("%s=? (%d) [%s]", label, tonumber(current) or 0, statusTag(true, estimated))
     end
 
     if pctKnown then
-        return string.format("%s=%s (?) [%s]", label, formatPct(pct, true), statusTag(true))
+        return string.format("%s=%s (?) [%s]", label, formatPct(pct, true), statusTag(true, estimated))
     end
 
     if not currentKnown and not pctKnown then
-        return string.format("%s=? [%s]", label, statusTag(false))
+        return string.format("%s=? [%s]", label, statusTag(false, estimated))
     end
 
-    return string.format("%s=? [%s]", label, statusTag(false))
+    return string.format("%s=? [%s]", label, statusTag(false, estimated))
 end
 
 local function getSlotShortLabel(slot)
@@ -287,7 +290,7 @@ function ExportHUD:GetDiagnosticLines(state, recommendations)
             "self hp=%s [%s] | %s | %s",
             formatPct(state.player.healthPct, state.player.healthKnown),
             statusTag(state.player.healthKnown),
-            formatResourceLine(state.player.primaryResourceShortLabel or "pwr", state.player.primaryCurrent, state.player.primaryPct, state.player.primaryKnown, state.player.primaryPctKnown),
+            formatResourceLine(state.player.primaryResourceShortLabel or "pwr", state.player.primaryCurrent, state.player.primaryPct, state.player.primaryKnown, state.player.primaryPctKnown, state.player.primaryEstimated),
             formatResourceLine(state.player.secondaryResourceShortLabel or "sec", state.player.secondaryCurrent, state.player.secondaryPct, state.player.secondaryKnown, state.player.secondaryPctKnown)
         ),
         table.concat(slotLine, " | "),
