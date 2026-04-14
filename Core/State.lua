@@ -67,10 +67,42 @@ local function percentage(current, max)
     return math.max(0, math.min(100, (current / max) * 100))
 end
 
+local function tryActionHealth(unitID, current, max, pct, isKnown)
+    local looksAlive = unitExists(unitID) and not unitDead(unitID)
+
+    if (not isKnown) or (looksAlive and max > 0 and pct <= 0) then
+        local fallbackPct, fallbackPctKnown = addon:TryActionUnitNumber(unitID, "HealthPercent", pct or 0)
+        if fallbackPctKnown then
+            pct = math.max(0, math.min(fallbackPct or 0, 100))
+            isKnown = true
+        end
+
+        if not max or max <= 0 then
+            local fallbackMax, fallbackMaxKnown = addon:TryActionUnitNumber(unitID, "HealthMax", max or 0)
+            if fallbackMaxKnown and fallbackMax > 0 then
+                max = fallbackMax
+            end
+        end
+
+        if max and max > 0 and (not current or current <= 0) and isKnown and pct > 0 then
+            current = math.floor((max * pct / 100) + 0.5)
+        elseif not current or current <= 0 then
+            local fallbackCurrent, fallbackCurrentKnown = addon:TryActionUnitNumber(unitID, "Health", current or 0)
+            if fallbackCurrentKnown then
+                current = fallbackCurrent
+            end
+        end
+    end
+
+    return current or 0, max or 0, pct or 0, isKnown and (max or 0) > 0
+end
+
 local function readUnitHealth(unitID)
     local current, currentKnown = addon:TryUntaintNumber(protectedCall(UnitHealth, unitID), 0)
     local max, maxKnown = addon:TryUntaintNumber(protectedCall(UnitHealthMax, unitID), 0)
-    return current, max, percentage(current, max), currentKnown and maxKnown and max > 0
+    local pct = percentage(current, max)
+    local isKnown = currentKnown and maxKnown and max > 0
+    return tryActionHealth(unitID, current, max, pct, isKnown)
 end
 
 local function readPower(unitID, powerType)

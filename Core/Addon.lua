@@ -136,23 +136,59 @@ function addon:NormalizeString(value)
     return normalized
 end
 
+function addon:TryCompatUnwrap(value)
+    if value == nil then
+        return nil, true
+    end
+
+    local compat = self:GetCompatLayer()
+    if compat and type(compat.TryUnwrap) == "function" then
+        local ok, success, normalized = pcall(compat.TryUnwrap, compat, value)
+        if ok and success then
+            return normalized, true
+        end
+
+        ok, success, normalized = pcall(compat.TryUnwrap, value)
+        if ok and success then
+            return normalized, true
+        end
+    end
+
+    local normalized = self:NormalizeValue(value)
+    if normalized ~= nil then
+        return normalized, true
+    end
+
+    return nil, false
+end
+
 function addon:TryUntaintNumber(value, fallback)
     local requestedFallback = type(fallback) == "number" and fallback or 0
+    local secretInput = self:IsSecretValue(value)
 
-    if type(value) == "number" and not self:IsSecretValue(value) then
+    if type(value) == "number" and not secretInput then
         return value, true
+    end
+
+    local unwrapped, unwrappedKnown = self:TryCompatUnwrap(value)
+    if unwrappedKnown and type(unwrapped) == "number" and not self:IsSecretValue(unwrapped) then
+        return unwrapped, true
     end
 
     local compat = self:GetCompatLayer()
     if compat and type(compat.UntaintNumber) == "function" then
         local ok, normalized = pcall(compat.UntaintNumber, compat, value, requestedFallback)
         if ok and type(normalized) == "number" and not self:IsSecretValue(normalized) then
-            return normalized, true
+            if not secretInput or normalized ~= requestedFallback then
+                return normalized, true
+            end
         end
 
         ok, normalized = pcall(compat.UntaintNumber, value, requestedFallback)
         if ok and type(normalized) == "number" and not self:IsSecretValue(normalized) then
-            return normalized, true
+            if not secretInput or normalized ~= requestedFallback then
+                return normalized, true
+            end
         end
     end
 
@@ -167,6 +203,39 @@ end
 function addon:UntaintNumber(value, fallback)
     local normalized = self:TryUntaintNumber(value, fallback)
     return normalized
+end
+
+function addon:GetActionUnit(unitID)
+    local action = rawget(_G, "Action")
+    if type(action) ~= "table" or type(action.Unit) ~= "function" then
+        return nil
+    end
+
+    local ok, unit = pcall(action.Unit, unitID)
+    if ok and type(unit) == "table" then
+        return unit
+    end
+
+    return nil
+end
+
+function addon:TryActionUnitNumber(unitID, methodName, fallback)
+    local unit = self:GetActionUnit(unitID)
+    if not unit then
+        return fallback or 0, false
+    end
+
+    local method = unit[methodName]
+    if type(method) ~= "function" then
+        return fallback or 0, false
+    end
+
+    local ok, raw = pcall(method, unit)
+    if not ok then
+        return fallback or 0, false
+    end
+
+    return self:TryUntaintNumber(raw, fallback)
 end
 
 function addon:Print(message)

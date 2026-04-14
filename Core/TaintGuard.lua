@@ -10,6 +10,23 @@ local function trimIncidents(incidents)
     end
 end
 
+local function isRelevantSource(source)
+    source = tostring(source or "")
+    if source == "" or source == "nil" then
+        return false
+    end
+
+    if source == addon.name then
+        return true
+    end
+
+    if source:find("SimplyMidnight", 1, true) then
+        return true
+    end
+
+    return false
+end
+
 function TaintGuard:Record(kind, payload)
     payload = payload or {}
     payload.kind = kind
@@ -59,6 +76,10 @@ function TaintGuard:Initialize()
     self.frame:RegisterEvent("ADDON_ACTION_FORBIDDEN")
     self.frame:RegisterEvent("MACRO_ACTION_BLOCKED")
     self.frame:SetScript("OnEvent", function(_, event, source, funcName)
+        if not isRelevantSource(source) then
+            return
+        end
+
         self:Record(event, {
             source = tostring(source),
             message = tostring(funcName or ""),
@@ -67,4 +88,3 @@ function TaintGuard:Initialize()
 end
 
 addon.TaintGuard = TaintGuard
-
