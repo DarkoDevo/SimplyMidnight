@@ -106,24 +106,25 @@ function TaintGuard:GetStatusLine()
 end
 
 function TaintGuard:Initialize()
-    if self.frame then
+    if self.initialized then
         return
     end
 
-    self.frame = CreateFrame("Frame")
-    self.frame:RegisterEvent("ADDON_ACTION_BLOCKED")
-    self.frame:RegisterEvent("ADDON_ACTION_FORBIDDEN")
-    self.frame:RegisterEvent("MACRO_ACTION_BLOCKED")
-    self.frame:SetScript("OnEvent", function(_, event, source, funcName)
-        if not isRelevantSource(source) then
-            return
-        end
+    self.initialized = true
+    addon:RegisterRuntimeEvent("ADDON_ACTION_BLOCKED", self, "OnRuntimeEvent")
+    addon:RegisterRuntimeEvent("ADDON_ACTION_FORBIDDEN", self, "OnRuntimeEvent")
+    addon:RegisterRuntimeEvent("MACRO_ACTION_BLOCKED", self, "OnRuntimeEvent")
+end
 
-        self:Record(event, {
-            source = tostring(source),
-            message = tostring(funcName or ""),
-        })
-    end)
+function TaintGuard:OnRuntimeEvent(event, source, funcName)
+    if not isRelevantSource(source) then
+        return
+    end
+
+    self:Record(event, {
+        source = tostring(source),
+        message = tostring(funcName or ""),
+    })
 end
 
 addon.TaintGuard = TaintGuard

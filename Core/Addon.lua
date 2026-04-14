@@ -1,6 +1,18 @@
 local addonName, addon = ...
 
 local unpackCompat = table.unpack or unpack
+local bootstrapFrame
+local runtimeEventListeners = {}
+local preregisteredRuntimeEvents = {
+    PLAYER_ENTERING_WORLD = true,
+    DISPLAY_SIZE_CHANGED = true,
+    UNIT_SPELLCAST_SUCCEEDED = true,
+    COMBAT_LOG_EVENT_UNFILTERED = true,
+    PLAYER_SPECIALIZATION_CHANGED = true,
+    ADDON_ACTION_BLOCKED = true,
+    ADDON_ACTION_FORBIDDEN = true,
+    MACRO_ACTION_BLOCKED = true,
+}
 
 local function deepCopy(value)
     if type(value) ~= "table" then
@@ -494,6 +506,44 @@ function addon:NotifyCompatibilityChanged()
     end
 end
 
+function addon:RegisterRuntimeEvent(eventName, owner, methodName)
+    eventName = tostring(eventName or "")
+    if eventName == "" or type(owner) ~= "table" or type(owner[methodName]) ~= "function" then
+        return false
+    end
+
+    local listeners = runtimeEventListeners[eventName]
+    if type(listeners) ~= "table" then
+        listeners = {}
+        runtimeEventListeners[eventName] = listeners
+    end
+
+    for _, listener in ipairs(listeners) do
+        if listener.owner == owner and listener.methodName == methodName then
+            return true
+        end
+    end
+
+    listeners[#listeners + 1] = {
+        owner = owner,
+        methodName = methodName,
+    }
+
+    if bootstrapFrame and not preregisteredRuntimeEvents[eventName] then
+        local ok = pcall(bootstrapFrame.RegisterEvent, bootstrapFrame, eventName)
+        if ok then
+            preregisteredRuntimeEvents[eventName] = true
+        elseif self.TaintGuard and self.TaintGuard.Record then
+            self.TaintGuard:Record("EVENT_REGISTER_FAILED", {
+                source = self.name,
+                message = eventName,
+            })
+        end
+    end
+
+    return true
+end
+
 function addon:InitializeModules()
     if self.TaintGuard and self.TaintGuard.Initialize then
         self.TaintGuard:Initialize()
@@ -529,14 +579,35 @@ function addon:InitializeModules()
     self:NotifyCompatibilityChanged()
 end
 
-local bootstrapFrame = CreateFrame("Frame")
+local function dispatchRuntimeEvent(event, ...)
+    local listeners = runtimeEventListeners[event]
+    if type(listeners) ~= "table" then
+        return
+    end
+
+    for _, listener in ipairs(listeners) do
+        local owner = listener.owner
+        local method = owner and owner[listener.methodName]
+        if type(method) == "function" then
+            addon:SafeCall("EVENT:" .. tostring(event), method, owner, event, ...)
+        end
+    end
+end
+
+bootstrapFrame = CreateFrame("Frame")
 bootstrapFrame:RegisterEvent("ADDON_LOADED")
 bootstrapFrame:RegisterEvent("PLAYER_LOGIN")
-bootstrapFrame:SetScript("OnEvent", function(_, event, arg1)
+for eventName in pairs(preregisteredRuntimeEvents) do
+    bootstrapFrame:RegisterEvent(eventName)
+end
+bootstrapFrame:SetScript("OnEvent", function(_, event, ...)
+    local arg1 = ...
     if event == "ADDON_LOADED" and arg1 == addonName then
         addon:InitializeDatabase()
     elseif event == "PLAYER_LOGIN" then
         addon:InitializeModules()
         addon:Print("Loaded v" .. addon.version)
+    else
+        dispatchRuntimeEvent(event, ...)
     end
 end)

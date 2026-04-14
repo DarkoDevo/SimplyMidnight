@@ -95,19 +95,20 @@ function Registry:Initialize()
 
     self:EnsureCurrentPack(false)
 
-    if not self.eventFrame then
-        self.eventFrame = CreateFrame("Frame")
-        self.eventFrame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
-        self.eventFrame:SetScript("OnEvent", function(_, _, unitID)
-            if unitID ~= "player" then
-                return
-            end
+    if not self.initialized then
+        self.initialized = true
+        addon:RegisterRuntimeEvent("PLAYER_SPECIALIZATION_CHANGED", self, "OnRuntimeEvent")
+    end
+end
 
-            self:EnsureCurrentPack(false)
-            if addon.ConfigUI and addon.ConfigUI.frame and addon.ConfigUI.frame:IsShown() then
-                addon.ConfigUI:Refresh()
-            end
-        end)
+function Registry:OnRuntimeEvent(_, unitID)
+    if unitID ~= "player" then
+        return
+    end
+
+    self:EnsureCurrentPack(false)
+    if addon.ConfigUI and addon.ConfigUI.frame and addon.ConfigUI.frame:IsShown() then
+        addon.ConfigUI:Refresh()
     end
 end
 

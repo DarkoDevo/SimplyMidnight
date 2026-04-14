@@ -5,6 +5,13 @@ local Recommendations = {
         slots = {},
     },
 }
+local OUTBREAK_SPELL_ID = 77575
+local OUTBREAK_DISEASE_ALIASES = {
+    [191587] = true,
+    [1240996] = true,
+    [196782] = true,
+    [1241786] = true,
+}
 
 local function protectedCall(callback, ...)
     if type(callback) ~= "function" then
@@ -123,6 +130,33 @@ local function fail(reason)
     return false, reason
 end
 
+local function auraSpellMatches(requestedSpellID, actualSpellID)
+    requestedSpellID = tonumber(requestedSpellID) or 0
+    actualSpellID = tonumber(actualSpellID) or 0
+    if requestedSpellID <= 0 or actualSpellID <= 0 then
+        return false
+    end
+
+    if requestedSpellID == actualSpellID then
+        return true
+    end
+
+    return OUTBREAK_DISEASE_ALIASES[requestedSpellID] == true and OUTBREAK_DISEASE_ALIASES[actualSpellID] == true
+end
+
+local function getAuraCandidateSpellIDs(spellID)
+    spellID = tonumber(spellID) or 0
+    if spellID <= 0 then
+        return {}
+    end
+
+    if OUTBREAK_DISEASE_ALIASES[spellID] then
+        return { 191587, 1240996, 196782, 1241786 }
+    end
+
+    return { spellID }
+end
+
 local function getAuraObject(unitID, index, filter)
     if type(C_UnitAuras) == "table" and type(C_UnitAuras.GetAuraDataByIndex) == "function" then
         local auraData = protectedCall(C_UnitAuras.GetAuraDataByIndex, unitID, index, filter)
@@ -170,37 +204,42 @@ local function tryActionAuraLookup(unitID, spellID, filter, sourceUnit)
         return nil
     end
 
-    local okRemain, remain, duration = pcall(remainMethod, unit, spellID, sourceIsPlayer, true)
-    if not okRemain then
-        return nil
-    end
+    local bestAura = nil
+    for _, candidateSpellID in ipairs(getAuraCandidateSpellIDs(spellID)) do
+        local okRemain, remain, duration = pcall(remainMethod, unit, candidateSpellID, sourceIsPlayer, true)
+        if okRemain then
+            remain = addon:UntaintNumber(remain, 0)
+            duration = addon:UntaintNumber(duration, 0)
+            if remain > 0 or duration > 0 then
+                local count = 0
+                if type(stacksMethod) == "function" then
+                    local okStacks, stacks = pcall(stacksMethod, unit, candidateSpellID, sourceIsPlayer, true)
+                    if okStacks then
+                        count = addon:UntaintNumber(stacks, 0)
+                    end
+                end
 
-    remain = addon:UntaintNumber(remain, 0)
-    duration = addon:UntaintNumber(duration, 0)
-    if remain <= 0 and duration <= 0 then
-        return nil
-    end
+                local expirationTime = 0
+                if remain > 0 and remain < math.huge then
+                    expirationTime = GetTime() + remain
+                end
 
-    local count = 0
-    if type(stacksMethod) == "function" then
-        local okStacks, stacks = pcall(stacksMethod, unit, spellID, sourceIsPlayer, true)
-        if okStacks then
-            count = addon:UntaintNumber(stacks, 0)
+                bestAura = {
+                    count = count > 0 and count or 1,
+                    duration = duration,
+                    expirationTime = expirationTime,
+                    remaining = remain == math.huge and 0 or remain,
+                    source = sourceIsPlayer and "player" or nil,
+                }
+
+                if remain > 0 then
+                    return bestAura
+                end
+            end
         end
     end
 
-    local expirationTime = 0
-    if remain > 0 and remain < math.huge then
-        expirationTime = GetTime() + remain
-    end
-
-    return {
-        count = count > 0 and count or 1,
-        duration = duration,
-        expirationTime = expirationTime,
-        remaining = remain == math.huge and 0 or remain,
-        source = sourceIsPlayer and "player" or nil,
-    }
+    return bestAura
 end
 
 local function readAura(unitID, spellID, filter, sourceUnit)
@@ -216,7 +255,7 @@ local function readAura(unitID, spellID, filter, sourceUnit)
             break
         end
 
-        if normalizedSpellID == spellID then
+        if auraSpellMatches(spellID, normalizedSpellID) then
             local sourceToken = addon:NormalizeString(auraData.sourceUnit or auraData.unitCaster)
             if sourceUnit and (not sourceToken or not unitExists(sourceUnit) or not unitIsUnit(sourceToken, sourceUnit)) then
                 -- Keep scanning until we find the aura from the requested source.
@@ -593,6 +632,9 @@ function Recommendations:Refresh(state, options)
         end
 
         result.slots[slot] = selected
+        if selected and addon.Trackers and addon.Trackers.RememberSuggestion then
+            addon.Trackers:RememberSuggestion(selected.spellID, "target")
+        end
     end
 
     self.latest = result

@@ -2,10 +2,12 @@ local _, addon = ...
 
 local Trackers = {
     outbreakTrackedByGUID = {},
+    outbreakRequestedByGUID = {},
 }
 
 local OUTBREAK_SPELL_ID = 77575
 local OUTBREAK_TRACK_SECONDS = 24
+local OUTBREAK_REQUEST_SECONDS = 1.5
 local OUTBREAK_DISEASE_IDS = {
     191587,
     1240996,
@@ -54,57 +56,61 @@ local function isOutbreakDiseaseSpell(spellID)
 end
 
 function Trackers:Initialize()
-    if self.frame then
+    if self.initialized then
         return
     end
 
-    self.frame = CreateFrame("Frame")
-    self.frame:RegisterEvent("PLAYER_ENTERING_WORLD")
-    self.frame:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED")
-    self.frame:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
-    self.frame:SetScript("OnEvent", function(_, event, ...)
-        if event == "PLAYER_ENTERING_WORLD" then
-            self.outbreakTrackedByGUID = {}
-            return
-        end
+    self.initialized = true
+    addon:RegisterRuntimeEvent("PLAYER_ENTERING_WORLD", self, "OnRuntimeEvent")
+    addon:RegisterRuntimeEvent("UNIT_SPELLCAST_SUCCEEDED", self, "OnRuntimeEvent")
+    addon:RegisterRuntimeEvent("COMBAT_LOG_EVENT_UNFILTERED", self, "OnRuntimeEvent")
+end
 
-        if event == "UNIT_SPELLCAST_SUCCEEDED" then
-            local unitID, _, spellID = ...
-            spellID = addon:UntaintNumber(spellID, 0)
-            if unitID == "player" and spellID == OUTBREAK_SPELL_ID then
-                self:RememberOutbreakForUnit("target", OUTBREAK_TRACK_SECONDS)
-            end
-            return
-        end
+function Trackers:OnRuntimeEvent(event, ...)
+    if event == "PLAYER_ENTERING_WORLD" then
+        self.outbreakTrackedByGUID = {}
+        self.outbreakRequestedByGUID = {}
+        return
+    end
 
-        local timestamp, subevent, _, sourceGUID, _, _, _, destGUID, _, _, _, spellID = CombatLogGetCurrentEventInfo()
-        sourceGUID = addon:NormalizeString(sourceGUID)
-        destGUID = addon:NormalizeString(destGUID)
+    if event == "UNIT_SPELLCAST_SUCCEEDED" then
+        local unitID, _, spellID = ...
         spellID = addon:UntaintNumber(spellID, 0)
-        if not sourceGUID or not destGUID or spellID <= 0 then
-            return
+        if unitID == "player" and spellID == OUTBREAK_SPELL_ID then
+            self:RememberOutbreakRequestForUnit("target", OUTBREAK_REQUEST_SECONDS)
+            self:RememberOutbreakForUnit("target", OUTBREAK_TRACK_SECONDS)
         end
+        return
+    end
 
-        local playerGUID = unitGUID("player")
-        if not playerGUID or sourceGUID ~= playerGUID then
-            return
-        end
+    local _, subevent, _, sourceGUID, _, _, _, destGUID, _, _, _, spellID = CombatLogGetCurrentEventInfo()
+    sourceGUID = addon:NormalizeString(sourceGUID)
+    destGUID = addon:NormalizeString(destGUID)
+    spellID = addon:UntaintNumber(spellID, 0)
+    if not sourceGUID or not destGUID or spellID <= 0 then
+        return
+    end
 
-        if spellID == OUTBREAK_SPELL_ID and subevent == "SPELL_CAST_SUCCESS" then
-            self:RememberOutbreakForGUID(destGUID, OUTBREAK_TRACK_SECONDS)
-            return
-        end
+    local playerGUID = unitGUID("player")
+    if not playerGUID or sourceGUID ~= playerGUID then
+        return
+    end
 
-        if not isOutbreakDiseaseSpell(spellID) then
-            return
-        end
+    if spellID == OUTBREAK_SPELL_ID and subevent == "SPELL_CAST_SUCCESS" then
+        self:RememberOutbreakRequestForGUID(destGUID, OUTBREAK_REQUEST_SECONDS)
+        self:RememberOutbreakForGUID(destGUID, OUTBREAK_TRACK_SECONDS)
+        return
+    end
 
-        if subevent == "SPELL_AURA_APPLIED" or subevent == "SPELL_AURA_REFRESH" or subevent == "SPELL_AURA_APPLIED_DOSE" then
-            self:RememberSpellForGUID(destGUID, spellID, OUTBREAK_TRACK_SECONDS)
-        elseif subevent == "SPELL_AURA_REMOVED" then
-            self:ForgetSpellForGUID(destGUID, spellID)
-        end
-    end)
+    if not isOutbreakDiseaseSpell(spellID) then
+        return
+    end
+
+    if subevent == "SPELL_AURA_APPLIED" or subevent == "SPELL_AURA_REFRESH" or subevent == "SPELL_AURA_APPLIED_DOSE" then
+        self:RememberSpellForGUID(destGUID, spellID, OUTBREAK_TRACK_SECONDS)
+    elseif subevent == "SPELL_AURA_REMOVED" then
+        self:ForgetSpellForGUID(destGUID, spellID)
+    end
 end
 
 function Trackers:RememberSpellForGUID(guid, spellID, durationSeconds)
@@ -157,6 +163,31 @@ function Trackers:RememberOutbreakForUnit(unitID, durationSeconds)
     end
 end
 
+function Trackers:RememberOutbreakRequestForGUID(guid, durationSeconds)
+    guid = addon:NormalizeString(guid)
+    durationSeconds = tonumber(durationSeconds) or OUTBREAK_REQUEST_SECONDS
+    if not guid or durationSeconds <= 0 then
+        return
+    end
+
+    self.outbreakRequestedByGUID[guid] = now() + durationSeconds
+end
+
+function Trackers:RememberOutbreakRequestForUnit(unitID, durationSeconds)
+    local guid = unitGUID(unitID)
+    if guid then
+        self:RememberOutbreakRequestForGUID(guid, durationSeconds)
+    end
+end
+
+function Trackers:RememberSuggestion(spellID, unitID)
+    if tonumber(spellID) ~= OUTBREAK_SPELL_ID then
+        return
+    end
+
+    self:RememberOutbreakRequestForUnit(unitID or "target", OUTBREAK_REQUEST_SECONDS)
+end
+
 function Trackers:GetTrackedAura(unitID, spellID, filter, sourceUnit)
     if not unitID or not spellID then
         return nil
@@ -178,19 +209,32 @@ function Trackers:GetTrackedAura(unitID, spellID, filter, sourceUnit)
 
     local tracked = self.outbreakTrackedByGUID[guid]
     if type(tracked) ~= "table" then
-        return nil
+        tracked = nil
     end
 
-    local expiresAt = tracked[tonumber(spellID)] or 0
+    local expiresAt = tracked and tracked[tonumber(spellID)] or 0
     local currentTime = now()
     if expiresAt <= currentTime and isOutbreakDiseaseSpell(spellID) then
         for index = 1, #OUTBREAK_DISEASE_IDS do
-            expiresAt = math.max(expiresAt, tracked[OUTBREAK_DISEASE_IDS[index]] or 0)
+            expiresAt = math.max(expiresAt, tracked and tracked[OUTBREAK_DISEASE_IDS[index]] or 0)
         end
     end
 
     if expiresAt <= currentTime then
         self.outbreakTrackedByGUID[guid] = nil
+        local requestedUntil = self.outbreakRequestedByGUID[guid] or 0
+        if requestedUntil > currentTime and isOutbreakDiseaseSpell(spellID) then
+            return {
+                count = 1,
+                duration = OUTBREAK_REQUEST_SECONDS,
+                expirationTime = requestedUntil,
+                remaining = math.max(0, requestedUntil - currentTime),
+                source = "player",
+                provisional = true,
+            }
+        end
+
+        self.outbreakRequestedByGUID[guid] = nil
         return nil
     end
 

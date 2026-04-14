@@ -164,25 +164,25 @@ function Compatibility:GetStatusLine()
 end
 
 function Compatibility:Initialize()
-    if self.frame then
+    if self.initialized then
         self:Refresh()
         return
     end
 
-    self.frame = CreateFrame("Frame")
-    self.frame:RegisterEvent("ADDON_LOADED")
-    self.frame:RegisterEvent("PLAYER_ENTERING_WORLD")
-    self.frame:RegisterEvent("DISPLAY_SIZE_CHANGED")
-    self.frame:SetScript("OnEvent", function(_, event, arg1)
-        if event == "ADDON_LOADED" then
-            if arg1 == addon.name or arg1 == "SimplyGlad" or arg1 == "TellMeWhen" then
-                self:Refresh()
-            end
-            return
-        end
+    self.initialized = true
+    addon:RegisterRuntimeEvent("ADDON_LOADED", self, "OnRuntimeEvent")
+    addon:RegisterRuntimeEvent("PLAYER_ENTERING_WORLD", self, "OnRuntimeEvent")
+    addon:RegisterRuntimeEvent("DISPLAY_SIZE_CHANGED", self, "OnRuntimeEvent")
+    self:Refresh()
+end
 
-        self:Refresh()
-    end)
+function Compatibility:OnRuntimeEvent(event, arg1)
+    if event == "ADDON_LOADED" then
+        if arg1 == addon.name or arg1 == "SimplyGlad" or arg1 == "TellMeWhen" then
+            self:Refresh()
+        end
+        return
+    end
 
     self:Refresh()
 end

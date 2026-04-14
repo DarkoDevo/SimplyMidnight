@@ -223,6 +223,48 @@ local function readPower(unitID, powerType)
     return tryActionPower(unitID, powerType, current, max, pct, currentKnown, maxKnown, pctKnown, prefersSecretFallback)
 end
 
+local function readDeathKnightRunes()
+    local readyRunes = -1
+    local readyRunesKnown = false
+
+    local frameworkRunes, frameworkRunesKnown = addon:TryActionPlayerNumber("Rune", -1)
+    if frameworkRunesKnown then
+        readyRunes = math.max(0, math.min(6, math.floor((frameworkRunes or 0) + 0.0001)))
+        readyRunesKnown = true
+    end
+
+    if type(GetRuneCooldown) == "function" then
+        local countedRunes = 0
+        local sawRuneData = false
+
+        for index = 1, 6 do
+            local _, duration, runeReady = protectedCall(GetRuneCooldown, index)
+            if duration ~= nil or runeReady ~= nil then
+                sawRuneData = true
+                duration = addon:UntaintNumber(duration, 0)
+                if addon:NormalizeBoolean(runeReady, false) or duration <= 0 then
+                    countedRunes = countedRunes + 1
+                end
+            end
+        end
+
+        if sawRuneData then
+            if readyRunesKnown then
+                readyRunes = math.max(readyRunes, countedRunes)
+            else
+                readyRunes = countedRunes
+                readyRunesKnown = true
+            end
+        end
+    end
+
+    if not readyRunesKnown then
+        return 0, 6, 0, false, false
+    end
+
+    return readyRunes, 6, percentage(readyRunes, 6), true, true
+end
+
 local function getMode()
     local inInstance, instanceType = protectedCall(IsInInstance)
     inInstance = addon:NormalizeBoolean(inInstance, false)
@@ -314,7 +356,9 @@ function State:Refresh()
 
     local secondaryType = secondaryPowerByClass[classTag]
     local secondaryCurrent, secondaryMax, secondaryPct, secondaryCurrentKnown, secondaryPctKnown = 0, 0, 0, false, false
-    if secondaryType ~= nil then
+    if classTag == "DEATHKNIGHT" then
+        secondaryCurrent, secondaryMax, secondaryPct, secondaryCurrentKnown, secondaryPctKnown = readDeathKnightRunes()
+    elseif secondaryType ~= nil then
         secondaryCurrent, secondaryMax, secondaryPct, secondaryCurrentKnown, secondaryPctKnown = readPower("player", secondaryType)
     end
 
