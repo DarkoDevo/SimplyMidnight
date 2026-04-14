@@ -35,6 +35,140 @@ local function now()
     return 0
 end
 
+-- Centralize Midnight secret-value handling so every module can read game state
+-- through the same compatibility path when Blizzard or Action changes behavior.
+function addon:GetCompatLayer()
+    local action = rawget(_G, "Action")
+    if type(action) ~= "table" then
+        return nil
+    end
+
+    if type(action.Compat) == "table" then
+        return action.Compat
+    end
+
+    if type(action.SecretEngine) == "table" and type(action.SecretEngine.Compat) == "table" then
+        return action.SecretEngine.Compat
+    end
+
+    return nil
+end
+
+function addon:IsSecretValue(value)
+    if value == nil then
+        return false
+    end
+
+    local compat = self:GetCompatLayer()
+    if compat and type(compat.IsSecret) == "function" then
+        local ok, secret = pcall(compat.IsSecret, compat, value)
+        if ok and secret then
+            return true
+        end
+
+        ok, secret = pcall(compat.IsSecret, value)
+        if ok and secret then
+            return true
+        end
+    end
+
+    if type(_G.issecretvalue) == "function" then
+        local ok, secret = pcall(_G.issecretvalue, value)
+        if ok and secret then
+            return true
+        end
+    end
+
+    return false
+end
+
+function addon:NormalizeValue(value)
+    if value == nil then
+        return nil
+    end
+
+    local compat = self:GetCompatLayer()
+    if compat and type(compat.NormalizeValue) == "function" then
+        local ok, normalized = pcall(compat.NormalizeValue, compat, value)
+        if ok and normalized ~= nil then
+            return normalized
+        end
+
+        ok, normalized = pcall(compat.NormalizeValue, value)
+        if ok and normalized ~= nil then
+            return normalized
+        end
+    end
+
+    if not self:IsSecretValue(value) then
+        return value
+    end
+
+    if type(_G.scrubsecretvalues) == "function" then
+        local ok, scrubbed = pcall(_G.scrubsecretvalues, value)
+        if ok and not self:IsSecretValue(scrubbed) then
+            return scrubbed
+        end
+    end
+
+    return nil
+end
+
+function addon:NormalizeBoolean(value, fallback)
+    local normalized = self:NormalizeValue(value)
+    if normalized == true or normalized == 1 then
+        return true
+    end
+
+    if normalized == false or normalized == 0 then
+        return false
+    end
+
+    return fallback and true or false
+end
+
+function addon:NormalizeString(value)
+    local normalized = self:NormalizeValue(value)
+    if type(normalized) ~= "string" or normalized == "" then
+        return nil
+    end
+
+    return normalized
+end
+
+function addon:TryUntaintNumber(value, fallback)
+    local requestedFallback = type(fallback) == "number" and fallback or 0
+
+    if type(value) == "number" and not self:IsSecretValue(value) then
+        return value, true
+    end
+
+    local compat = self:GetCompatLayer()
+    if compat and type(compat.UntaintNumber) == "function" then
+        local ok, normalized = pcall(compat.UntaintNumber, compat, value, requestedFallback)
+        if ok and type(normalized) == "number" and not self:IsSecretValue(normalized) then
+            return normalized, true
+        end
+
+        ok, normalized = pcall(compat.UntaintNumber, value, requestedFallback)
+        if ok and type(normalized) == "number" and not self:IsSecretValue(normalized) then
+            return normalized, true
+        end
+    end
+
+    local normalized = self:NormalizeValue(value)
+    if type(normalized) == "number" and not self:IsSecretValue(normalized) then
+        return normalized, true
+    end
+
+    return requestedFallback, false
+end
+
+function addon:UntaintNumber(value, fallback)
+    local normalized = self:TryUntaintNumber(value, fallback)
+    return normalized
+end
+
 function addon:Print(message)
     print("|cff7ec8ffSimplyMidnight|r: " .. tostring(message))
 end

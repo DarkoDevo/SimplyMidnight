@@ -2,7 +2,7 @@
 ## Title: SimplyMidnight
 ## Notes: Spell suggestion HUD and external overlay bridge for Midnight.
 ## Author: DarkoDevo
-## Version: 0.2.1
+## Version: 0.2.2
 ## SavedVariables: SimplyMidnightDB
 ## OptionalDeps: TellMeWhen, SimplyGlad
 

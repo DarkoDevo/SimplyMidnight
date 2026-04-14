@@ -6,12 +6,33 @@ local Recommendations = {
     },
 }
 
+local function protectedCall(callback, ...)
+    if type(callback) ~= "function" then
+        return nil
+    end
+
+    local ok, resultA, resultB, resultC, resultD, resultE, resultF, resultG, resultH = pcall(callback, ...)
+    if not ok then
+        return nil
+    end
+
+    return resultA, resultB, resultC, resultD, resultE, resultF, resultG, resultH
+end
+
+local function unitExists(unitID)
+    return addon:NormalizeBoolean(protectedCall(UnitExists, unitID), false)
+end
+
+local function unitIsUnit(leftUnitID, rightUnitID)
+    return addon:NormalizeBoolean(protectedCall(UnitIsUnit, leftUnitID, rightUnitID), false)
+end
+
 local function getCooldownRemaining(spellID)
     if type(C_Spell) == "table" and type(C_Spell.GetSpellCooldown) == "function" then
-        local ok, info = pcall(C_Spell.GetSpellCooldown, spellID)
-        if ok and type(info) == "table" then
-            local startTime = info.startTime or 0
-            local duration = info.duration or 0
+        local info = protectedCall(C_Spell.GetSpellCooldown, spellID)
+        if type(info) == "table" then
+            local startTime = addon:UntaintNumber(info.startTime, 0)
+            local duration = addon:UntaintNumber(info.duration, 0)
             if duration <= 0 then
                 return 0
             end
@@ -20,7 +41,9 @@ local function getCooldownRemaining(spellID)
     end
 
     if type(GetSpellCooldown) == "function" then
-        local startTime, duration = GetSpellCooldown(spellID)
+        local startTime, duration = protectedCall(GetSpellCooldown, spellID)
+        startTime = addon:UntaintNumber(startTime, 0)
+        duration = addon:UntaintNumber(duration, 0)
         if duration and duration > 0 then
             return math.max((startTime + duration) - GetTime(), 0)
         end
@@ -31,49 +54,47 @@ end
 
 local function getChargeCount(spellID)
     if type(C_Spell) == "table" and type(C_Spell.GetSpellCharges) == "function" then
-        local ok, info = pcall(C_Spell.GetSpellCharges, spellID)
-        if ok and type(info) == "table" then
-            return info.currentCharges or 0
+        local info = protectedCall(C_Spell.GetSpellCharges, spellID)
+        if type(info) == "table" then
+            return addon:UntaintNumber(info.currentCharges, 0)
         end
     elseif type(GetSpellCharges) == "function" then
-        local charges = GetSpellCharges(spellID)
-        return charges or 0
+        return addon:UntaintNumber(protectedCall(GetSpellCharges, spellID), 0)
     end
     return 0
 end
 
 local function isSpellKnown(spellID)
     if type(IsSpellKnownOrOverridesKnown) == "function" then
-        return IsSpellKnownOrOverridesKnown(spellID)
+        return addon:NormalizeBoolean(protectedCall(IsSpellKnownOrOverridesKnown, spellID), false)
     end
-    if type(IsPlayerSpell) == "function" and IsPlayerSpell(spellID) then
+    if type(IsPlayerSpell) == "function" and addon:NormalizeBoolean(protectedCall(IsPlayerSpell, spellID), false) then
         return true
     end
     if type(IsSpellKnown) == "function" then
-        return IsSpellKnown(spellID)
+        return addon:NormalizeBoolean(protectedCall(IsSpellKnown, spellID), false)
     end
     return addon:GetSpellName(spellID) ~= nil
 end
 
 local function isSpellUsable(spellID)
     if type(IsUsableSpell) == "function" then
-        local usable = IsUsableSpell(spellID)
-        return usable and true or false
+        return addon:NormalizeBoolean(protectedCall(IsUsableSpell, spellID), false)
     end
     return true
 end
 
 local function isSpellInRange(spellID, unitID)
-    if type(IsSpellInRange) ~= "function" or not unitID or not UnitExists(unitID) then
+    if type(IsSpellInRange) ~= "function" or not unitID or not unitExists(unitID) then
         return true
     end
 
-    local ok, result = pcall(IsSpellInRange, spellID, unitID)
-    if not ok or result == nil then
+    local result = protectedCall(IsSpellInRange, spellID, unitID)
+    if result == nil then
         return true
     end
 
-    if result == 0 or result == false then
+    if addon:NormalizeBoolean(result, true) == false then
         return false
     end
 
@@ -91,31 +112,35 @@ local function asConditionList(value)
 end
 
 local function readAura(unitID, spellID, filter, sourceUnit)
-    if not unitID or not spellID or not UnitExists(unitID) or type(UnitAura) ~= "function" then
+    if not unitID or not spellID or not unitExists(unitID) or type(UnitAura) ~= "function" then
         return nil
     end
 
     for index = 1, 40 do
-        local name, _, count, _, duration, expirationTime, source, _, _, auraSpellID = UnitAura(unitID, index, filter)
-        if not name then
+        local name, _, count, _, duration, expirationTime, source, _, _, auraSpellID = protectedCall(UnitAura, unitID, index, filter)
+        local auraName = addon:NormalizeString(name)
+        local normalizedSpellID = addon:UntaintNumber(auraSpellID, 0)
+        if not auraName and normalizedSpellID <= 0 then
             break
         end
 
-        if auraSpellID == spellID then
-            if sourceUnit and (type(source) ~= "string" or not UnitExists(sourceUnit) or not UnitIsUnit(source, sourceUnit)) then
+        if normalizedSpellID == spellID then
+            local sourceToken = addon:NormalizeString(source)
+            if sourceUnit and (not sourceToken or not unitExists(sourceUnit) or not unitIsUnit(sourceToken, sourceUnit)) then
                 -- Keep scanning until we find the aura from the requested source.
             else
                 local remaining = 0
-                if expirationTime and expirationTime > 0 then
-                    remaining = math.max(expirationTime - GetTime(), 0)
+                local normalizedExpirationTime = addon:UntaintNumber(expirationTime, 0)
+                if normalizedExpirationTime > 0 then
+                    remaining = math.max(normalizedExpirationTime - GetTime(), 0)
                 end
 
                 return {
-                    count = count or 0,
-                    duration = duration or 0,
-                    expirationTime = expirationTime or 0,
+                    count = addon:UntaintNumber(count, 0),
+                    duration = addon:UntaintNumber(duration, 0),
+                    expirationTime = normalizedExpirationTime,
                     remaining = remaining,
-                    source = source,
+                    source = sourceToken,
                 }
             end
         end

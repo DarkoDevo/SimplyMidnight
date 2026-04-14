@@ -248,9 +248,11 @@ function ExportHUD:Render(state, recommendations)
 end
 
 function ExportHUD:Tick()
-    local state = addon.State:Refresh()
-    local recommendations = addon.Recommendations:Refresh(state)
-    self:Render(state, recommendations)
+    addon:SafeCall("ExportHUD.Tick", function()
+        local state = addon.State:Refresh()
+        local recommendations = addon.Recommendations:Refresh(state)
+        self:Render(state, recommendations)
+    end)
 end
 
 function ExportHUD:Start()
