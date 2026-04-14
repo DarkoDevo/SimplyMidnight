@@ -324,4 +324,40 @@ function Trackers:GetTrackedAura(unitID, spellID, filter, sourceUnit)
     }
 end
 
+function Trackers:GetDebugSnapshot(unitID, spellID)
+    self:Poll()
+
+    local snapshot = {
+        sinceLastCast = getActionSpellTimeSinceLastCast(OUTBREAK_SPELL_ID),
+        cooldownRemaining = getSpellCooldownRemaining(OUTBREAK_SPELL_ID),
+        requestRemaining = 0,
+        trackedRemaining = 0,
+    }
+
+    local guid = unitGUID(unitID)
+    if not guid then
+        return snapshot
+    end
+
+    local requestState = self.outbreakRequestedByGUID[guid]
+    if type(requestState) == "table" then
+        snapshot.requestRemaining = math.max(0, (tonumber(requestState.expiresAt) or 0) - now())
+    else
+        snapshot.requestRemaining = math.max(0, (tonumber(requestState) or 0) - now())
+    end
+
+    local tracked = self.outbreakTrackedByGUID[guid]
+    if type(tracked) == "table" then
+        local trackedRemaining = tonumber(tracked[tonumber(spellID)]) or 0
+        if isOutbreakDiseaseSpell(spellID) then
+            for index = 1, #OUTBREAK_DISEASE_IDS do
+                trackedRemaining = math.max(trackedRemaining, tonumber(tracked[OUTBREAK_DISEASE_IDS[index]]) or 0)
+            end
+        end
+        snapshot.trackedRemaining = math.max(0, trackedRemaining - now())
+    end
+
+    return snapshot
+end
+
 addon.Trackers = Trackers

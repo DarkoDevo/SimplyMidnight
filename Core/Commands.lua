@@ -49,6 +49,8 @@ end
 
 local function printDiagnostics()
     local state = addon.State and addon.State:Refresh() or nil
+    local preAuraDebug = addon.Recommendations and addon.Recommendations.GetAuraDebug and addon.Recommendations:GetAuraDebug("target", 191587, "HARMFUL", "player") or nil
+    local trackerDebug = addon.Trackers and addon.Trackers.GetDebugSnapshot and addon.Trackers:GetDebugSnapshot("target", 191587) or nil
     local recommendations = addon.Recommendations and addon.Recommendations:Refresh(state, { diagnostics = true }) or nil
     if not state or not recommendations then
         addon:Print("Diagnostics unavailable")
@@ -83,11 +85,27 @@ local function printDiagnostics()
             ))
         end
 
-        local auraDebug = addon.Recommendations and addon.Recommendations.GetAuraDebug and addon.Recommendations:GetAuraDebug("target", 191587, "HARMFUL", "player") or nil
-        if type(auraDebug) == "table" then
-            local remainText = type(auraDebug.remaining) == "number" and string.format("%.1f", auraDebug.remaining) or "?"
-            local countText = type(auraDebug.count) == "number" and tostring(math.floor(auraDebug.count + 0.5)) or "?"
-            addon:Print(string.format("disease src=%s rem=%s cnt=%s prov=%s", tostring(auraDebug.source or "missing"), remainText, countText, tostring(auraDebug.provisional)))
+        if type(preAuraDebug) == "table" then
+            local remainText = type(preAuraDebug.remaining) == "number" and string.format("%.1f", preAuraDebug.remaining) or "?"
+            local countText = type(preAuraDebug.count) == "number" and tostring(math.floor(preAuraDebug.count + 0.5)) or "?"
+            addon:Print(string.format("disease src=%s rem=%s cnt=%s prov=%s", tostring(preAuraDebug.source or "missing"), remainText, countText, tostring(preAuraDebug.provisional)))
+        end
+
+        if type(trackerDebug) == "table" then
+            local function fmtTime(value)
+                if type(value) ~= "number" or value == math.huge then
+                    return "?"
+                end
+                return string.format("%.1f", value)
+            end
+
+            addon:Print(string.format(
+                "otrk cast=%s req=%s trk=%s cd=%s",
+                fmtTime(trackerDebug.sinceLastCast),
+                fmtTime(trackerDebug.requestRemaining),
+                fmtTime(trackerDebug.trackedRemaining),
+                fmtTime(trackerDebug.cooldownRemaining)
+            ))
         end
         return
     end

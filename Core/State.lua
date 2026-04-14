@@ -199,44 +199,7 @@ local function tryActionPower(unitID, powerType, current, max, pct, currentKnown
                 pct, pctKnown = preferPositiveNumber(pct, pctKnown, playerPct, playerPctKnown)
             end
             typedPowerSignal = typedPowerSignal or playerPctKnown
-        end
 
-        local fallbackPct, fallbackPctKnown = addon:TryActionUnitNumber(unitID, "PowerPercent", pct or 0, powerType)
-        local secretPct, secretPctKnown = addon:TrySecretEngineNumber("GetPowerPercent", pct or 0, unitID, powerType)
-        if secretPctKnown then
-            fallbackPct, fallbackPctKnown = secretPct, true
-        elseif fallbackPctKnown then
-            fallbackPctKnown = true
-        end
-        if fallbackPctKnown then
-            fallbackPct = math.max(0, math.min(fallbackPct or 0, 100))
-            pct, pctKnown = preferPositiveNumber(pct, pctKnown, fallbackPct, fallbackPctKnown)
-        end
-        typedPowerSignal = typedPowerSignal or fallbackPctKnown
-
-        local fallbackCurrent, fallbackCurrentKnown = addon:TryActionUnitNumber(unitID, "Power", current or 0, powerType)
-        local secretCurrent, secretCurrentKnown = addon:TrySecretEngineNumber("GetPower", current or 0, unitID, powerType)
-        if secretCurrentKnown then
-            fallbackCurrent, fallbackCurrentKnown = secretCurrent, true
-        elseif fallbackCurrentKnown then
-            fallbackCurrentKnown = true
-        end
-        if fallbackCurrentKnown then
-            current, currentKnown = preferPositiveNumber(current, currentKnown, fallbackCurrent, fallbackCurrentKnown)
-        end
-        typedPowerSignal = typedPowerSignal or fallbackCurrentKnown
-
-        local fallbackMax, fallbackMaxKnown = addon:TryActionUnitNumber(unitID, "PowerMax", max or 0, powerType)
-        local secretMax, secretMaxKnown = addon:TrySecretEngineNumber("GetPowerMax", max or 0, unitID, powerType)
-        if secretMaxKnown and secretMax > 0 then
-            fallbackMax, fallbackMaxKnown = secretMax, true
-        end
-        if fallbackMaxKnown and fallbackMax > 0 and ((not maxKnown) or (max or 0) <= 0) then
-            max = fallbackMax
-            maxKnown = true
-        end
-
-        if unitID == "player" and powerType == runicPowerType then
             local rawUntypedCurrent, rawUntypedCurrentKnown = addon:TryUntaintNumber(protectedCall(UnitPower, unitID), 0)
             current, currentKnown = preferPositiveNumber(current, currentKnown, rawUntypedCurrent, rawUntypedCurrentKnown)
 
@@ -275,6 +238,41 @@ local function tryActionPower(unitID, powerType, current, max, pct, currentKnown
                 pctKnown = false
                 current = 0
                 pct = 0
+            end
+        else
+            local fallbackPct, fallbackPctKnown = addon:TryActionUnitNumber(unitID, "PowerPercent", pct or 0, powerType)
+            local secretPct, secretPctKnown = addon:TrySecretEngineNumber("GetPowerPercent", pct or 0, unitID, powerType)
+            if secretPctKnown then
+                fallbackPct, fallbackPctKnown = secretPct, true
+            elseif fallbackPctKnown then
+                fallbackPctKnown = true
+            end
+            if fallbackPctKnown then
+                fallbackPct = math.max(0, math.min(fallbackPct or 0, 100))
+                pct, pctKnown = preferPositiveNumber(pct, pctKnown, fallbackPct, fallbackPctKnown)
+            end
+            typedPowerSignal = typedPowerSignal or fallbackPctKnown
+
+            local fallbackCurrent, fallbackCurrentKnown = addon:TryActionUnitNumber(unitID, "Power", current or 0, powerType)
+            local secretCurrent, secretCurrentKnown = addon:TrySecretEngineNumber("GetPower", current or 0, unitID, powerType)
+            if secretCurrentKnown then
+                fallbackCurrent, fallbackCurrentKnown = secretCurrent, true
+            elseif fallbackCurrentKnown then
+                fallbackCurrentKnown = true
+            end
+            if fallbackCurrentKnown then
+                current, currentKnown = preferPositiveNumber(current, currentKnown, fallbackCurrent, fallbackCurrentKnown)
+            end
+            typedPowerSignal = typedPowerSignal or fallbackCurrentKnown
+
+            local fallbackMax, fallbackMaxKnown = addon:TryActionUnitNumber(unitID, "PowerMax", max or 0, powerType)
+            local secretMax, secretMaxKnown = addon:TrySecretEngineNumber("GetPowerMax", max or 0, unitID, powerType)
+            if secretMaxKnown and secretMax > 0 then
+                fallbackMax, fallbackMaxKnown = secretMax, true
+            end
+            if fallbackMaxKnown and fallbackMax > 0 and ((not maxKnown) or (max or 0) <= 0) then
+                max = fallbackMax
+                maxKnown = true
             end
         end
     end
