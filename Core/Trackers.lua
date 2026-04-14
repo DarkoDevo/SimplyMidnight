@@ -176,6 +176,18 @@ function Trackers:RememberOutbreakRequestForGUID(guid, durationSeconds)
     end
 
     local requestedAt = now()
+    local existing = self.outbreakRequestedByGUID[guid]
+    local existingRequestedAt = type(existing) == "table" and tonumber(existing.requestedAt) or 0
+    local existingExpiresAt = type(existing) == "table" and tonumber(existing.expiresAt) or tonumber(existing) or 0
+
+    if existingRequestedAt > 0 and existingExpiresAt > requestedAt then
+        self.outbreakRequestedByGUID[guid] = {
+            requestedAt = existingRequestedAt,
+            expiresAt = math.max(existingExpiresAt, requestedAt + durationSeconds),
+        }
+        return
+    end
+
     self.outbreakRequestedByGUID[guid] = {
         requestedAt = requestedAt,
         expiresAt = requestedAt + durationSeconds,

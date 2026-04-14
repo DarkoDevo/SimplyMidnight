@@ -62,6 +62,26 @@ local function printDiagnostics()
                 addon:Print(line)
             end
         end
+
+        local primaryDebug = state.player and state.player.primaryDebug or nil
+        if type(primaryDebug) == "table" then
+            local function fmt(value)
+                if type(value) == "number" then
+                    return tostring(math.floor(value + 0.5))
+                end
+                return "?"
+            end
+
+            addon:Print(string.format(
+                "pwrsrc rawT=%s raw=%s actP=%s actU=%s secT=%s sec=%s",
+                fmt(primaryDebug.rawTyped),
+                fmt(primaryDebug.rawUntyped),
+                fmt(primaryDebug.actionPlayer),
+                fmt(primaryDebug.actionUnit),
+                fmt(primaryDebug.secretTyped),
+                fmt(primaryDebug.secretUntyped)
+            ))
+        end
         return
     end
 

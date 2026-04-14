@@ -178,9 +178,10 @@ end
 local function tryActionPower(unitID, powerType, current, max, pct, currentKnown, maxKnown, pctKnown, preferSecretFallback)
     local allowFallback = preferSecretFallback == true
     local preferPositiveSignal = unitID == "player" and powerType ~= nil
+    local runicPowerType = (Enum and Enum.PowerType and Enum.PowerType.RunicPower or 6)
 
     if allowFallback and ((not pctKnown) or (not currentKnown) or (not maxKnown)) then
-        if unitID == "player" and powerType == (Enum and Enum.PowerType and Enum.PowerType.RunicPower or 6) then
+        if unitID == "player" and powerType == runicPowerType then
             local playerCurrent, playerCurrentKnown = addon:TryActionPlayerNumber("RunicPower", current or 0)
             current, currentKnown = preferPositiveNumber(current, currentKnown, playerCurrent, playerCurrentKnown)
 
@@ -229,6 +230,41 @@ local function tryActionPower(unitID, powerType, current, max, pct, currentKnown
             max = fallbackMax
             maxKnown = true
         end
+
+        if unitID == "player" and powerType == runicPowerType then
+            local rawUntypedCurrent, rawUntypedCurrentKnown = addon:TryUntaintNumber(protectedCall(UnitPower, unitID), 0)
+            current, currentKnown = preferPositiveNumber(current, currentKnown, rawUntypedCurrent, rawUntypedCurrentKnown)
+
+            local rawUntypedMax, rawUntypedMaxKnown = addon:TryUntaintNumber(protectedCall(UnitPowerMax, unitID), 0)
+            if rawUntypedMaxKnown and rawUntypedMax > 0 and ((not maxKnown) or (max or 0) <= 0) then
+                max = rawUntypedMax
+                maxKnown = true
+            end
+
+            local actionUntypedPct, actionUntypedPctKnown = addon:TryActionUnitNumber(unitID, "PowerPercent", pct or 0)
+            pct, pctKnown = preferPositiveNumber(pct, pctKnown, actionUntypedPct, actionUntypedPctKnown)
+
+            local actionUntypedCurrent, actionUntypedCurrentKnown = addon:TryActionUnitNumber(unitID, "Power", current or 0)
+            current, currentKnown = preferPositiveNumber(current, currentKnown, actionUntypedCurrent, actionUntypedCurrentKnown)
+
+            local actionUntypedMax, actionUntypedMaxKnown = addon:TryActionUnitNumber(unitID, "PowerMax", max or 0)
+            if actionUntypedMaxKnown and actionUntypedMax > 0 and ((not maxKnown) or (max or 0) <= 0) then
+                max = actionUntypedMax
+                maxKnown = true
+            end
+
+            local secretUntypedPct, secretUntypedPctKnown = addon:TrySecretEngineNumber("GetPowerPercent", pct or 0, unitID)
+            pct, pctKnown = preferPositiveNumber(pct, pctKnown, secretUntypedPct, secretUntypedPctKnown)
+
+            local secretUntypedCurrent, secretUntypedCurrentKnown = addon:TrySecretEngineNumber("GetPower", current or 0, unitID)
+            current, currentKnown = preferPositiveNumber(current, currentKnown, secretUntypedCurrent, secretUntypedCurrentKnown)
+
+            local secretUntypedMax, secretUntypedMaxKnown = addon:TrySecretEngineNumber("GetPowerMax", max or 0, unitID)
+            if secretUntypedMaxKnown and secretUntypedMax > 0 and ((not maxKnown) or (max or 0) <= 0) then
+                max = secretUntypedMax
+                maxKnown = true
+            end
+        end
     end
 
     local suspiciousZeroCurrent = preferPositiveSignal and pctKnown and (pct or 0) > 0 and (current or 0) <= 0
@@ -260,6 +296,34 @@ local function readPower(unitID, powerType)
     local pct = percentage(current, max)
     local pctKnown = currentKnown and maxKnown and max > 0
     return tryActionPower(unitID, powerType, current, max, pct, currentKnown, maxKnown, pctKnown, prefersSecretFallback)
+end
+
+local function getPlayerPrimaryPowerDebug(classTag, powerType)
+    if classTag ~= "DEATHKNIGHT" or powerType == nil then
+        return nil
+    end
+
+    local debug = {}
+
+    local rawTyped, rawTypedKnown = addon:TryUntaintNumber(protectedCall(UnitPower, "player", powerType), 0)
+    debug.rawTyped = rawTypedKnown and rawTyped or nil
+
+    local rawUntyped, rawUntypedKnown = addon:TryUntaintNumber(protectedCall(UnitPower, "player"), 0)
+    debug.rawUntyped = rawUntypedKnown and rawUntyped or nil
+
+    local actionPlayer, actionPlayerKnown = addon:TryActionPlayerNumber("RunicPower", 0)
+    debug.actionPlayer = actionPlayerKnown and actionPlayer or nil
+
+    local actionUnit, actionUnitKnown = addon:TryActionUnitNumber("player", "Power", 0)
+    debug.actionUnit = actionUnitKnown and actionUnit or nil
+
+    local secretTyped, secretTypedKnown = addon:TrySecretEngineNumber("GetPower", 0, "player", powerType)
+    debug.secretTyped = secretTypedKnown and secretTyped or nil
+
+    local secretUntyped, secretUntypedKnown = addon:TrySecretEngineNumber("GetPower", 0, "player")
+    debug.secretUntyped = secretUntypedKnown and secretUntyped or nil
+
+    return debug
 end
 
 local function readDeathKnightRunes()
@@ -393,6 +457,7 @@ function State:Refresh()
     local _, _, targetPct, targetHealthKnown = readUnitHealth("target")
     local primaryType = primaryPowerByClass[classTag]
     local primaryCurrent, primaryMax, primaryPct, primaryCurrentKnown, primaryPctKnown = readPower("player", primaryType)
+    local primaryDebug = getPlayerPrimaryPowerDebug(classTag, primaryType)
 
     local secondaryType = secondaryPowerByClass[classTag]
     local secondaryCurrent, secondaryMax, secondaryPct, secondaryCurrentKnown, secondaryPctKnown = 0, 0, 0, false, false
@@ -435,6 +500,7 @@ function State:Refresh()
             primaryPct = primaryPct,
             primaryKnown = primaryCurrentKnown,
             primaryPctKnown = primaryPctKnown,
+            primaryDebug = primaryDebug,
             secondaryCurrent = secondaryCurrent,
             secondaryMax = secondaryMax,
             secondaryPct = secondaryPct,
