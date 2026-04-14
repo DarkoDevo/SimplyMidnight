@@ -189,6 +189,10 @@ function Trackers:Initialize()
     self.lastObservedOutbreakCastAt = 0
     self.lastObservedOutbreakTargetGUID = nil
     self.resourceEstimates = {}
+
+    addon:RegisterRuntimeEvent("COMBAT_LOG_EVENT_UNFILTERED", self, "OnRuntimeEvent")
+    addon:RegisterRuntimeEvent("PLAYER_ENTERING_WORLD", self, "OnRuntimeEvent")
+    addon:RegisterRuntimeEvent("PLAYER_REGEN_ENABLED", self, "OnRuntimeEvent")
 end
 
 function Trackers:GetEstimatedPrimaryResource(config, hints)
@@ -203,12 +207,18 @@ function Trackers:GetEstimatedPrimaryResource(config, hints)
             current = tonumber(config.defaultCurrent) or 0,
             max = tonumber(config.max) or 100,
             known = false,
+            config = config,
             lastSecondaryCurrent = nil,
             spenderSinceLastCast = {},
             spenderBuffState = {},
+            totalGenerated = 0,
+            totalSpent = 0,
+            lastObservedSpellID = nil,
             debug = {},
         }
         self.resourceEstimates[config.id] = estimate
+    else
+        estimate.config = config
     end
 
     local maxValue = tonumber(config.max) or estimate.max or 100
@@ -216,6 +226,7 @@ function Trackers:GetEstimatedPrimaryResource(config, hints)
 
     local inCombat = hints.inCombat == true
     local secondaryCurrent = tonumber(hints.secondaryCurrent)
+    local secondaryMax = tonumber(hints.secondaryMax)
     local rawCurrent = tonumber(hints.rawCurrent)
     local rawKnown = hints.rawKnown == true
 
@@ -227,6 +238,18 @@ function Trackers:GetEstimatedPrimaryResource(config, hints)
         estimate.known = true
     else
         local generated = 0
+        local seeded = 0
+        if config.seedFromSecondaryGap and estimate.lastSecondaryCurrent == nil and secondaryCurrent ~= nil and secondaryMax and secondaryMax > 0 then
+            local perSpend = tonumber(config.generationPerSecondarySpend) or 0
+            local missingSecondary = math.max(0, secondaryMax - secondaryCurrent)
+            seeded = missingSecondary * perSpend
+            if seeded > 0 then
+                estimate.current = clamp(math.max(estimate.current or 0, seeded), 0, maxValue)
+                estimate.known = true
+                estimate.totalGenerated = (estimate.totalGenerated or 0) + seeded
+            end
+        end
+
         if secondaryCurrent and estimate.lastSecondaryCurrent ~= nil and secondaryCurrent < estimate.lastSecondaryCurrent then
             local spentSecondary = estimate.lastSecondaryCurrent - secondaryCurrent
             local perSpend = tonumber(config.generationPerSecondarySpend) or 0
@@ -234,6 +257,7 @@ function Trackers:GetEstimatedPrimaryResource(config, hints)
             if generated > 0 then
                 estimate.current = clamp((estimate.current or 0) + generated, 0, maxValue)
                 estimate.known = true
+                estimate.totalGenerated = (estimate.totalGenerated or 0) + generated
             end
         end
 
@@ -261,6 +285,8 @@ function Trackers:GetEstimatedPrimaryResource(config, hints)
                     spent = spent + spellCost
                     estimate.current = clamp((estimate.current or 0) - spellCost, 0, maxValue)
                     estimate.known = true
+                    estimate.totalSpent = (estimate.totalSpent or 0) + spellCost
+                    estimate.lastObservedSpellID = tonumber(spellID) or nil
                 end
             end
 
@@ -271,6 +297,10 @@ function Trackers:GetEstimatedPrimaryResource(config, hints)
         estimate.debug = {
             generated = generated,
             spent = spent,
+            seeded = seeded,
+            totalGenerated = estimate.totalGenerated,
+            totalSpent = estimate.totalSpent,
+            lastSpellID = estimate.lastObservedSpellID,
         }
     end
 
@@ -286,6 +316,75 @@ function Trackers:GetEstimatedPrimaryResource(config, hints)
         estimated = true,
         debug = estimate.debug,
     }
+end
+
+function Trackers:ObserveSpellCast(spellID, sourceGUID, destGUID)
+    spellID = tonumber(spellID)
+    if not spellID then
+        return
+    end
+
+    local playerGUID = unitGUID("player")
+    if playerGUID and sourceGUID and sourceGUID ~= playerGUID then
+        return
+    end
+
+    if spellID == OUTBREAK_SPELL_ID then
+        self.lastObservedOutbreakCastAt = now()
+        self.lastObservedOutbreakTargetGUID = addon:NormalizeString(destGUID) or unitGUID("target")
+    end
+
+    for _, estimate in pairs(self.resourceEstimates) do
+        local config = type(estimate) == "table" and estimate.config or nil
+        local spellConfig = config and config.spenderSpells and config.spenderSpells[spellID] or nil
+        if type(spellConfig) == "table" then
+            local spellCost = tonumber(spellConfig.cost) or 0
+            local previousBuffActive = estimate.spenderBuffState and estimate.spenderBuffState[spellID] == true
+            if spellConfig.freeBuffSpellID and previousBuffActive then
+                spellCost = 0
+            end
+
+            if spellCost > 0 then
+                estimate.current = clamp((estimate.current or 0) - spellCost, 0, tonumber(config.max) or estimate.max or 100)
+                estimate.known = true
+                estimate.totalSpent = (estimate.totalSpent or 0) + spellCost
+            end
+
+            estimate.lastObservedSpellID = spellID
+            estimate.spenderSinceLastCast[spellID] = 0
+            if type(estimate.debug) ~= "table" then
+                estimate.debug = {}
+            end
+            estimate.debug.lastSpellID = spellID
+        end
+    end
+end
+
+function Trackers:OnRuntimeEvent(event)
+    if event == "PLAYER_ENTERING_WORLD" or event == "PLAYER_REGEN_ENABLED" then
+        self.lastObservedOutbreakSinceLastCast = math.huge
+        self.lastObservedOutbreakCastAt = 0
+        self.lastObservedOutbreakTargetGUID = nil
+        return
+    end
+
+    if event ~= "COMBAT_LOG_EVENT_UNFILTERED" or type(CombatLogGetCurrentEventInfo) ~= "function" then
+        return
+    end
+
+    local _, subEvent, _, sourceGUID, _, _, _, destGUID, _, _, _, spellID = CombatLogGetCurrentEventInfo()
+    if sourceGUID ~= unitGUID("player") then
+        return
+    end
+
+    if subEvent == "SPELL_CAST_SUCCESS" then
+        self:ObserveSpellCast(spellID, sourceGUID, destGUID)
+        return
+    end
+
+    if (subEvent == "SPELL_AURA_APPLIED" or subEvent == "SPELL_AURA_REFRESH") and isOutbreakDiseaseSpell(spellID) and destGUID then
+        self:RememberOutbreakForGUID(destGUID, OUTBREAK_TRACK_SECONDS)
+    end
 end
 
 function Trackers:RememberSpellForGUID(guid, spellID, durationSeconds)

@@ -109,6 +109,13 @@ local function printDiagnostics()
                     fmt(primaryDebug.estimatedGenerated),
                     fmt(primaryDebug.estimatedSpent)
                 ))
+                addon:Print(string.format(
+                    "pwrest2 seed=%s totalGen=%s totalSpent=%s last=%s",
+                    fmt(primaryDebug.estimatedSeeded),
+                    fmt(primaryDebug.estimatedTotalGenerated),
+                    fmt(primaryDebug.estimatedTotalSpent),
+                    fmt(primaryDebug.estimatedLastSpellID)
+                ))
             end
 
             if primaryDebug.framePath then

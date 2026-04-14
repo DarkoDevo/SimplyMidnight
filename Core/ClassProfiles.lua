@@ -147,6 +147,7 @@ local specOverrides = {
                 max = 100,
                 defaultCurrent = 0,
                 resetOutOfCombat = true,
+                seedFromSecondaryGap = true,
                 generationPerSecondarySpend = 10,
                 spenderSpells = {
                     [47541] = { cost = 40, freeBuffSpellID = 81340 },

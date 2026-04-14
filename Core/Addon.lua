@@ -4,6 +4,19 @@ local unpackCompat = table.unpack or unpack
 local bootstrapFrame
 local runtimeEventListeners = {}
 local dispatchRuntimeEvent
+local bootstrapEvents = {
+    "ADDON_LOADED",
+    "PLAYER_LOGIN",
+    "PLAYER_ENTERING_WORLD",
+    "PLAYER_SPECIALIZATION_CHANGED",
+    "DISPLAY_SIZE_CHANGED",
+    "ADDON_ACTION_BLOCKED",
+    "ADDON_ACTION_FORBIDDEN",
+    "MACRO_ACTION_BLOCKED",
+    "COMBAT_LOG_EVENT_UNFILTERED",
+    "PLAYER_REGEN_DISABLED",
+    "PLAYER_REGEN_ENABLED",
+}
 
 local function deepCopy(value)
     if type(value) ~= "table" then
@@ -620,8 +633,9 @@ dispatchRuntimeEvent = function(event, ...)
 end
 
 bootstrapFrame = CreateFrame("Frame")
-bootstrapFrame:RegisterEvent("ADDON_LOADED")
-bootstrapFrame:RegisterEvent("PLAYER_LOGIN")
+for _, eventName in ipairs(bootstrapEvents) do
+    bootstrapFrame:RegisterEvent(eventName)
+end
 bootstrapFrame:SetScript("OnEvent", function(_, event, ...)
     local arg1 = ...
     if event == "ADDON_LOADED" and arg1 == addonName then

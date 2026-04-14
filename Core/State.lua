@@ -1280,6 +1280,7 @@ function State:Refresh()
     local primaryEstimate = addon.Trackers and addon.Trackers.GetEstimatedPrimaryResource and addon.Trackers:GetEstimatedPrimaryResource(primaryEstimateConfig, {
         inCombat = inCombat,
         secondaryCurrent = secondaryCurrentKnown and secondaryCurrent or nil,
+        secondaryMax = secondaryCurrentKnown and secondaryMax or nil,
         rawCurrent = primaryCurrent,
         rawKnown = primaryCurrentKnown,
     }) or nil
@@ -1301,6 +1302,10 @@ function State:Refresh()
         primaryDebug.estimatedActive = primaryEstimated
         primaryDebug.estimatedGenerated = primaryEstimate and primaryEstimate.debug and primaryEstimate.debug.generated or nil
         primaryDebug.estimatedSpent = primaryEstimate and primaryEstimate.debug and primaryEstimate.debug.spent or nil
+        primaryDebug.estimatedSeeded = primaryEstimate and primaryEstimate.debug and primaryEstimate.debug.seeded or nil
+        primaryDebug.estimatedTotalGenerated = primaryEstimate and primaryEstimate.debug and primaryEstimate.debug.totalGenerated or nil
+        primaryDebug.estimatedTotalSpent = primaryEstimate and primaryEstimate.debug and primaryEstimate.debug.totalSpent or nil
+        primaryDebug.estimatedLastSpellID = primaryEstimate and primaryEstimate.debug and primaryEstimate.debug.lastSpellID or nil
     end
 
     local targetExists = unitExists("target")
