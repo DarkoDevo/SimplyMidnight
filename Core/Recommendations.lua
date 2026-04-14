@@ -423,26 +423,36 @@ local function scanAuraList(unitID, spellID, filter, sourceUnit)
     return nil
 end
 
-readAura = function(unitID, spellID, filter, sourceUnit)
+local function inspectAuraSource(unitID, spellID, filter, sourceUnit)
     local aura = scanAuraList(unitID, spellID, filter, sourceUnit)
     if aura then
-        return aura
+        return "direct", aura
     end
 
     local nameplateUnitID = getMatchingNameplateUnitID(unitID)
     if nameplateUnitID then
         aura = scanAuraList(nameplateUnitID, spellID, filter, sourceUnit)
         if aura then
-            return aura
+            return "nameplate", aura
         end
     end
 
     local trackedAura = addon.Trackers and addon.Trackers.GetTrackedAura and addon.Trackers:GetTrackedAura(unitID, spellID, filter, sourceUnit) or nil
     if trackedAura then
-        return trackedAura
+        return trackedAura.provisional and "request" or "tracked", trackedAura
     end
 
-    return tryActionAuraLookup(unitID, spellID, filter, sourceUnit)
+    local actionAura = tryActionAuraLookup(unitID, spellID, filter, sourceUnit)
+    if actionAura then
+        return "action", actionAura
+    end
+
+    return "missing", nil
+end
+
+readAura = function(unitID, spellID, filter, sourceUnit)
+    local _, aura = inspectAuraSource(unitID, spellID, filter, sourceUnit)
+    return aura
 end
 
 local function matchesAuraList(conditionList, predicate)
@@ -715,6 +725,16 @@ function Recommendations:Initialize()
         slots = {},
     }
     self.primaryCommit = nil
+end
+
+function Recommendations:GetAuraDebug(unitID, spellID, filter, sourceUnit)
+    local source, aura = inspectAuraSource(unitID, spellID, filter, sourceUnit)
+    return {
+        source = source,
+        remaining = aura and tonumber(aura.remaining) or nil,
+        count = aura and tonumber(aura.count) or nil,
+        provisional = aura and aura.provisional == true or false,
+    }
 end
 
 function Recommendations:ResolveCommittedPrimary(candidates, state)

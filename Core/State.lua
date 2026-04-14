@@ -179,11 +179,13 @@ local function tryActionPower(unitID, powerType, current, max, pct, currentKnown
     local allowFallback = preferSecretFallback == true
     local preferPositiveSignal = unitID == "player" and powerType ~= nil
     local runicPowerType = (Enum and Enum.PowerType and Enum.PowerType.RunicPower or 6)
+    local typedPowerSignal = currentKnown or pctKnown
 
     if allowFallback and ((not pctKnown) or (not currentKnown) or (not maxKnown)) then
         if unitID == "player" and powerType == runicPowerType then
             local playerCurrent, playerCurrentKnown = addon:TryActionPlayerNumber("RunicPower", current or 0)
             current, currentKnown = preferPositiveNumber(current, currentKnown, playerCurrent, playerCurrentKnown)
+            typedPowerSignal = typedPowerSignal or playerCurrentKnown
 
             local playerMax, playerMaxKnown = addon:TryActionPlayerNumber("RunicPowerMax", max or 0)
             if playerMaxKnown and playerMax > 0 and ((not maxKnown) or (max or 0) <= 0) then
@@ -196,6 +198,7 @@ local function tryActionPower(unitID, powerType, current, max, pct, currentKnown
                 playerPct = math.max(0, math.min(playerPct or 0, 100))
                 pct, pctKnown = preferPositiveNumber(pct, pctKnown, playerPct, playerPctKnown)
             end
+            typedPowerSignal = typedPowerSignal or playerPctKnown
         end
 
         local fallbackPct, fallbackPctKnown = addon:TryActionUnitNumber(unitID, "PowerPercent", pct or 0, powerType)
@@ -209,6 +212,7 @@ local function tryActionPower(unitID, powerType, current, max, pct, currentKnown
             fallbackPct = math.max(0, math.min(fallbackPct or 0, 100))
             pct, pctKnown = preferPositiveNumber(pct, pctKnown, fallbackPct, fallbackPctKnown)
         end
+        typedPowerSignal = typedPowerSignal or fallbackPctKnown
 
         local fallbackCurrent, fallbackCurrentKnown = addon:TryActionUnitNumber(unitID, "Power", current or 0, powerType)
         local secretCurrent, secretCurrentKnown = addon:TrySecretEngineNumber("GetPower", current or 0, unitID, powerType)
@@ -220,6 +224,7 @@ local function tryActionPower(unitID, powerType, current, max, pct, currentKnown
         if fallbackCurrentKnown then
             current, currentKnown = preferPositiveNumber(current, currentKnown, fallbackCurrent, fallbackCurrentKnown)
         end
+        typedPowerSignal = typedPowerSignal or fallbackCurrentKnown
 
         local fallbackMax, fallbackMaxKnown = addon:TryActionUnitNumber(unitID, "PowerMax", max or 0, powerType)
         local secretMax, secretMaxKnown = addon:TrySecretEngineNumber("GetPowerMax", max or 0, unitID, powerType)
@@ -263,6 +268,13 @@ local function tryActionPower(unitID, powerType, current, max, pct, currentKnown
             if secretUntypedMaxKnown and secretUntypedMax > 0 and ((not maxKnown) or (max or 0) <= 0) then
                 max = secretUntypedMax
                 maxKnown = true
+            end
+
+            if not typedPowerSignal and currentKnown and (tonumber(current) or 0) <= 0 and pctKnown and (tonumber(pct) or 0) <= 0 then
+                currentKnown = false
+                pctKnown = false
+                current = 0
+                pct = 0
             end
         end
     end

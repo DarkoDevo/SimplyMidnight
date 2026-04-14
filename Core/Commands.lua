@@ -82,6 +82,13 @@ local function printDiagnostics()
                 fmt(primaryDebug.secretUntyped)
             ))
         end
+
+        local auraDebug = addon.Recommendations and addon.Recommendations.GetAuraDebug and addon.Recommendations:GetAuraDebug("target", 191587, "HARMFUL", "player") or nil
+        if type(auraDebug) == "table" then
+            local remainText = type(auraDebug.remaining) == "number" and string.format("%.1f", auraDebug.remaining) or "?"
+            local countText = type(auraDebug.count) == "number" and tostring(math.floor(auraDebug.count + 0.5)) or "?"
+            addon:Print(string.format("disease src=%s rem=%s cnt=%s prov=%s", tostring(auraDebug.source or "missing"), remainText, countText, tostring(auraDebug.provisional)))
+        end
         return
     end
 
