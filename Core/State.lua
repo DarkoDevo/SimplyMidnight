@@ -177,22 +177,54 @@ local explicitPlayerPowerBarPaths = {
         assumedMax = 100,
         scoreBias = 180,
     },
+    {
+        label = "PlayerFrameManaBar",
+        globalName = "PlayerFrameManaBar",
+        assumedMax = 100,
+        scoreBias = 180,
+    },
+    {
+        label = "PlayerFrameEnergyBar",
+        globalName = "PlayerFrameEnergyBar",
+        assumedMax = 100,
+        scoreBias = 170,
+    },
 }
 
 local function resolveNestedFrame(root, segments)
     local current = root
     for _, segment in ipairs(segments or {}) do
-        if type(current) ~= "table" then
+        local currentType = type(current)
+        if currentType ~= "table" and currentType ~= "userdata" then
             return nil
         end
 
-        current = rawget(current, segment) or current[segment]
+        local nextValue = nil
+        if currentType == "table" then
+            nextValue = rawget(current, segment)
+        end
+        if nextValue == nil then
+            nextValue = current[segment]
+        end
+        current = nextValue
         if current == nil then
             return nil
         end
     end
 
     return current
+end
+
+local function getExplicitPlayerPowerFrame(root, probe)
+    if type(probe) ~= "table" then
+        return nil
+    end
+
+    if type(probe.globalName) == "string" and probe.globalName ~= "" then
+        return rawget(_G, probe.globalName)
+    end
+
+    return resolveNestedFrame(root, probe.segments)
 end
 
 local function scorePlayerPowerBarCandidate(frame, path, minValue, maxValue, value, red, green, blue)
@@ -247,7 +279,8 @@ local function scorePlayerPowerBarCandidate(frame, path, minValue, maxValue, val
 end
 
 local function buildPlayerPowerBarCandidate(frame, path, assumedMax, scoreBias)
-    if type(frame) ~= "table" then
+    local frameType = type(frame)
+    if frameType ~= "table" and frameType ~= "userdata" then
         return nil
     end
 
@@ -374,6 +407,60 @@ local function addPlayerPowerBarCandidate(candidates, bestSnapshot, bestScore, f
     return bestSnapshot, bestScore
 end
 
+local function scanExplicitPowerRoot(candidates, bestSnapshot, bestScore, rootFrame, label, assumedMax, scoreBias)
+    local rootType = type(rootFrame)
+    if rootType ~= "table" and rootType ~= "userdata" then
+        return bestSnapshot, bestScore
+    end
+
+    bestSnapshot, bestScore = addPlayerPowerBarCandidate(
+        candidates,
+        bestSnapshot,
+        bestScore,
+        rootFrame,
+        label,
+        assumedMax,
+        scoreBias
+    )
+
+    local queue = { rootFrame }
+    local index = 1
+    local depth = {}
+    depth[rootFrame] = 0
+
+    while queue[index] do
+        local frame = queue[index]
+        local frameDepth = depth[frame] or 0
+        index = index + 1
+
+        if frameDepth < 3 and type(frame.GetChildren) == "function" then
+            local children = { frame:GetChildren() }
+            for childIndex = 1, #children do
+                local child = children[childIndex]
+                if child then
+                    queue[#queue + 1] = child
+                    depth[child] = frameDepth + 1
+                end
+            end
+        end
+
+        if frame ~= rootFrame then
+            local childLabel = string.format("%s.%s", tostring(label or "probe"), tostring(getFrameLabel(frame) or "?"))
+            bestSnapshot, bestScore = addPlayerPowerBarCandidate(
+                candidates,
+                bestSnapshot,
+                bestScore,
+                frame,
+                childLabel,
+                assumedMax,
+                scoreBias - (frameDepth * 10)
+            )
+        end
+    end
+
+    return bestSnapshot, bestScore
+end
+
 local function getPlayerPowerBarSnapshot()
     local currentTime = type(GetTime) == "function" and GetTime() or 0
     if playerPowerBarCache.snapshot and playerPowerBarCache.expiresAt > currentTime then
@@ -396,8 +483,8 @@ local function getPlayerPowerBarSnapshot()
     local index = 1
 
     for _, probe in ipairs(explicitPlayerPowerBarPaths) do
-        local frame = resolveNestedFrame(root, probe.segments)
-        bestSnapshot, bestScore = addPlayerPowerBarCandidate(
+        local frame = getExplicitPlayerPowerFrame(root, probe)
+        bestSnapshot, bestScore = scanExplicitPowerRoot(
             candidates,
             bestSnapshot,
             bestScore,
