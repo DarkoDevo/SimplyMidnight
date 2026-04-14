@@ -254,15 +254,25 @@ end
 
 function addon:GetActionUnit(unitID)
     local action = rawget(_G, "Action")
-    if type(action) ~= "table" or type(action.Unit) ~= "function" then
+    local unitFactory = action and action.Unit
+    if type(action) ~= "table" or (type(unitFactory) ~= "function" and type(unitFactory) ~= "table") then
         return nil
     end
 
-    local ok, unit = pcall(action.Unit, unitID)
+    local ok, unit = pcall(unitFactory, unitID)
     if ok and type(unit) == "table" then
         return unit
     end
 
+    return nil
+end
+
+function addon:GetActionPlayer()
+    local action = rawget(_G, "Action")
+    local player = action and action.Player
+    if type(player) == "table" then
+        return player
+    end
     return nil
 end
 
@@ -278,6 +288,25 @@ function addon:TryActionUnitNumber(unitID, methodName, fallback, ...)
     end
 
     local ok, raw = pcall(method, unit, ...)
+    if not ok then
+        return fallback or 0, false
+    end
+
+    return self:TryUntaintNumber(raw, fallback)
+end
+
+function addon:TryActionPlayerNumber(methodName, fallback, ...)
+    local player = self:GetActionPlayer()
+    if not player then
+        return fallback or 0, false
+    end
+
+    local method = player[methodName]
+    if type(method) ~= "function" then
+        return fallback or 0, false
+    end
+
+    local ok, raw = pcall(method, player, ...)
     if not ok then
         return fallback or 0, false
     end

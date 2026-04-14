@@ -129,6 +129,20 @@ local function tryActionPower(unitID, powerType, current, max, pct, currentKnown
     local allowFallback = preferSecretFallback == true
 
     if allowFallback and ((not pctKnown) or (not currentKnown) or (not maxKnown)) then
+        if unitID == "player" and powerType == (Enum and Enum.PowerType and Enum.PowerType.RunicPower or 6) then
+            local playerCurrent, playerCurrentKnown = addon:TryActionPlayerNumber("RunicPower", current or 0)
+            if playerCurrentKnown then
+                current = playerCurrent
+                currentKnown = true
+            end
+
+            local playerPct, playerPctKnown = addon:TryActionPlayerNumber("RunicPowerPercentage", pct or 0)
+            if playerPctKnown then
+                pct = math.max(0, math.min(playerPct or 0, 100))
+                pctKnown = true
+            end
+        end
+
         local fallbackPct, fallbackPctKnown = addon:TryActionUnitNumber(unitID, "PowerPercent", pct or 0)
         if not fallbackPctKnown then
             fallbackPct, fallbackPctKnown = addon:TrySecretEngineNumber("GetPowerPercent", pct or 0, unitID, powerType)
