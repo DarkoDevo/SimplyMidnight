@@ -118,6 +118,10 @@ local function tryActionHealth(unitID, current, max, pct, currentKnown, maxKnown
 end
 
 local function readUnitHealth(unitID)
+    if not unitExists(unitID) then
+        return 0, 0, 0, false, false, false
+    end
+
     local current, currentKnown = addon:TryUntaintNumber(protectedCall(UnitHealth, unitID), 0)
     local max, maxKnown = addon:TryUntaintNumber(protectedCall(UnitHealthMax, unitID), 0)
     local pct = percentage(current, max)
