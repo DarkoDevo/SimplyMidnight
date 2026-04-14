@@ -378,44 +378,44 @@ local function scanAuraList(unitID, spellID, filter, sourceUnit)
 
     for index = 1, 40 do
         local auraData = getAuraObject(unitID, index, filter)
-        local normalizedSpellID = auraData and addon:UntaintNumber(auraData.spellId or auraData.spellID, 0) or 0
-        local auraName = auraData and addon:NormalizeString(auraData.name) or nil
-        if not auraData or (not auraName and normalizedSpellID <= 0) then
-            break
-        end
+        if auraData then
+            local normalizedSpellID = addon:UntaintNumber(auraData.spellId or auraData.spellID, 0)
+            local auraName = addon:NormalizeString(auraData.name)
+            if auraName or normalizedSpellID > 0 then
+                if auraSpellMatches(spellID, normalizedSpellID) then
+                    local sourceToken = addon:NormalizeString(auraData.sourceUnit or auraData.unitCaster)
+                    local sourceMatches = true
+                    if sourceUnit and unitExists(sourceUnit) then
+                        if sourceToken and unitExists(sourceToken) then
+                            sourceMatches = unitIsUnit(sourceToken, sourceUnit)
+                        else
+                            sourceMatches = true
+                        end
+                    end
 
-        if auraSpellMatches(spellID, normalizedSpellID) then
-            local sourceToken = addon:NormalizeString(auraData.sourceUnit or auraData.unitCaster)
-            local sourceMatches = true
-            if sourceUnit and unitExists(sourceUnit) then
-                if sourceToken and unitExists(sourceToken) then
-                    sourceMatches = unitIsUnit(sourceToken, sourceUnit)
-                else
-                    sourceMatches = true
+                    if sourceMatches then
+                        local remaining = 0
+                        local normalizedExpirationTime = addon:UntaintNumber(auraData.expirationTime, 0)
+                        if normalizedExpirationTime > 0 then
+                            remaining = math.max(normalizedExpirationTime - GetTime(), 0)
+                        end
+                        local count = addon:UntaintNumber(auraData.applications, 0)
+                        if count <= 0 then
+                            count = 1
+                        end
+                        local normalizedDuration = addon:UntaintNumber(auraData.duration, 0)
+
+                        rememberObservedAura(unitID, spellID, normalizedSpellID, normalizedDuration, remaining)
+
+                        return {
+                            count = count,
+                            duration = normalizedDuration,
+                            expirationTime = normalizedExpirationTime,
+                            remaining = remaining,
+                            source = sourceToken,
+                        }
+                    end
                 end
-            end
-
-            if sourceMatches then
-                local remaining = 0
-                local normalizedExpirationTime = addon:UntaintNumber(auraData.expirationTime, 0)
-                if normalizedExpirationTime > 0 then
-                    remaining = math.max(normalizedExpirationTime - GetTime(), 0)
-                end
-                local count = addon:UntaintNumber(auraData.applications, 0)
-                if count <= 0 then
-                    count = 1
-                end
-                local normalizedDuration = addon:UntaintNumber(auraData.duration, 0)
-
-                rememberObservedAura(unitID, spellID, normalizedSpellID, normalizedDuration, remaining)
-
-                return {
-                    count = count,
-                    duration = normalizedDuration,
-                    expirationTime = normalizedExpirationTime,
-                    remaining = remaining,
-                    source = sourceToken,
-                }
             end
         end
     end

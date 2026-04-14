@@ -300,6 +300,45 @@ function addon:GetActionPlayer()
     return nil
 end
 
+function addon:GetActionSpell(spellID, ownerID)
+    local action = rawget(_G, "Action")
+    spellID = tonumber(spellID)
+    if type(action) ~= "table" or not spellID or spellID <= 0 then
+        return nil
+    end
+
+    local owner = tonumber(ownerID) or tonumber(action.PlayerSpec) or action.PlayerClass
+    if not owner then
+        return nil
+    end
+
+    self._actionSpellCache = type(self._actionSpellCache) == "table" and self._actionSpellCache or {}
+
+    local ownerCache = self._actionSpellCache[owner]
+    if type(ownerCache) == "table" and ownerCache[spellID] ~= nil then
+        return ownerCache[spellID] or nil
+    end
+
+    local spellTable = action[owner]
+    if type(spellTable) ~= "table" then
+        return nil
+    end
+
+    local found = false
+    for _, candidate in pairs(spellTable) do
+        if type(candidate) == "table" and tonumber(candidate.ID) == spellID then
+            found = candidate
+            break
+        end
+    end
+
+    ownerCache = type(ownerCache) == "table" and ownerCache or {}
+    ownerCache[spellID] = found
+    self._actionSpellCache[owner] = ownerCache
+
+    return found or nil
+end
+
 function addon:TryActionUnitNumber(unitID, methodName, fallback, ...)
     local unit = self:GetActionUnit(unitID)
     if not unit then
@@ -528,6 +567,8 @@ function addon:FireRuntimeEvent(eventName, ...)
 end
 
 function addon:InitializeModules()
+    self._actionSpellCache = nil
+
     if self.TaintGuard and self.TaintGuard.Initialize then
         self.TaintGuard:Initialize()
     end

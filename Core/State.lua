@@ -97,6 +97,22 @@ local function percentage(current, max)
     return math.max(0, math.min(100, (current / max) * 100))
 end
 
+local function preferPositiveNumber(currentValue, currentKnown, candidateValue, candidateKnown)
+    if not candidateKnown then
+        return currentValue, currentKnown
+    end
+
+    if not currentKnown then
+        return candidateValue, true
+    end
+
+    if type(candidateValue) == "number" and candidateValue > 0 and (tonumber(currentValue) or 0) <= 0 then
+        return candidateValue, true
+    end
+
+    return currentValue, currentKnown
+end
+
 local function tryActionHealth(unitID, current, max, pct, currentKnown, maxKnown, pctKnown)
     local looksAlive = unitExists(unitID) and not unitDead(unitID)
 
@@ -161,54 +177,68 @@ end
 
 local function tryActionPower(unitID, powerType, current, max, pct, currentKnown, maxKnown, pctKnown, preferSecretFallback)
     local allowFallback = preferSecretFallback == true
+    local preferPositiveSignal = unitID == "player" and powerType ~= nil
 
     if allowFallback and ((not pctKnown) or (not currentKnown) or (not maxKnown)) then
         if unitID == "player" and powerType == (Enum and Enum.PowerType and Enum.PowerType.RunicPower or 6) then
             local playerCurrent, playerCurrentKnown = addon:TryActionPlayerNumber("RunicPower", current or 0)
-            if playerCurrentKnown then
-                current = playerCurrent
-                currentKnown = true
-            end
+            current, currentKnown = preferPositiveNumber(current, currentKnown, playerCurrent, playerCurrentKnown)
 
             local playerMax, playerMaxKnown = addon:TryActionPlayerNumber("RunicPowerMax", max or 0)
-            if playerMaxKnown and playerMax > 0 then
+            if playerMaxKnown and playerMax > 0 and ((not maxKnown) or (max or 0) <= 0) then
                 max = playerMax
                 maxKnown = true
             end
 
             local playerPct, playerPctKnown = addon:TryActionPlayerNumber("RunicPowerPercentage", pct or 0)
             if playerPctKnown then
-                pct = math.max(0, math.min(playerPct or 0, 100))
-                pctKnown = true
+                playerPct = math.max(0, math.min(playerPct or 0, 100))
+                pct, pctKnown = preferPositiveNumber(pct, pctKnown, playerPct, playerPctKnown)
             end
         end
 
         local fallbackPct, fallbackPctKnown = addon:TryActionUnitNumber(unitID, "PowerPercent", pct or 0, powerType)
-        if not fallbackPctKnown then
-            fallbackPct, fallbackPctKnown = addon:TrySecretEngineNumber("GetPowerPercent", pct or 0, unitID, powerType)
+        local secretPct, secretPctKnown = addon:TrySecretEngineNumber("GetPowerPercent", pct or 0, unitID, powerType)
+        if secretPctKnown then
+            fallbackPct, fallbackPctKnown = secretPct, true
+        elseif fallbackPctKnown then
+            fallbackPctKnown = true
         end
         if fallbackPctKnown then
-            pct = math.max(0, math.min(fallbackPct or 0, 100))
-            pctKnown = true
+            fallbackPct = math.max(0, math.min(fallbackPct or 0, 100))
+            pct, pctKnown = preferPositiveNumber(pct, pctKnown, fallbackPct, fallbackPctKnown)
         end
 
         local fallbackCurrent, fallbackCurrentKnown = addon:TryActionUnitNumber(unitID, "Power", current or 0, powerType)
-        if not fallbackCurrentKnown then
-            fallbackCurrent, fallbackCurrentKnown = addon:TrySecretEngineNumber("GetPower", current or 0, unitID, powerType)
+        local secretCurrent, secretCurrentKnown = addon:TrySecretEngineNumber("GetPower", current or 0, unitID, powerType)
+        if secretCurrentKnown then
+            fallbackCurrent, fallbackCurrentKnown = secretCurrent, true
+        elseif fallbackCurrentKnown then
+            fallbackCurrentKnown = true
         end
         if fallbackCurrentKnown then
-            current = fallbackCurrent
-            currentKnown = true
+            current, currentKnown = preferPositiveNumber(current, currentKnown, fallbackCurrent, fallbackCurrentKnown)
         end
 
         local fallbackMax, fallbackMaxKnown = addon:TryActionUnitNumber(unitID, "PowerMax", max or 0, powerType)
-        if fallbackMaxKnown and fallbackMax > 0 then
+        local secretMax, secretMaxKnown = addon:TrySecretEngineNumber("GetPowerMax", max or 0, unitID, powerType)
+        if secretMaxKnown and secretMax > 0 then
+            fallbackMax, fallbackMaxKnown = secretMax, true
+        end
+        if fallbackMaxKnown and fallbackMax > 0 and ((not maxKnown) or (max or 0) <= 0) then
             max = fallbackMax
             maxKnown = true
         end
     end
 
-    if currentKnown and maxKnown and max > 0 then
+    local suspiciousZeroCurrent = preferPositiveSignal and pctKnown and (pct or 0) > 0 and (current or 0) <= 0
+    if maxKnown and max > 0 and pctKnown and ((not currentKnown) or suspiciousZeroCurrent) then
+        current = math.floor((max * pct / 100) + 0.5)
+        currentKnown = true
+        suspiciousZeroCurrent = false
+    end
+
+    if currentKnown and maxKnown and max > 0 and not suspiciousZeroCurrent then
         pct = percentage(current, max)
         pctKnown = true
     elseif pctKnown and maxKnown and max > 0 and not currentKnown then

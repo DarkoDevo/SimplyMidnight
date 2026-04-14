@@ -32,6 +32,10 @@ local function now()
     return type(GetTime) == "function" and GetTime() or 0
 end
 
+local function untaintNumber(value, fallback)
+    return addon:UntaintNumber(value, fallback)
+end
+
 local function unitGUID(unitID)
     return addon:NormalizeString(protectedCall(UnitGUID, unitID))
 end
@@ -77,6 +81,24 @@ local function getSpellCooldownRemaining(spellID)
     end
 
     return 0
+end
+
+local function getActionSpellTimeSinceLastCast(spellID)
+    if type(addon.GetActionSpell) ~= "function" then
+        return math.huge
+    end
+
+    local spell = addon:GetActionSpell(spellID)
+    if type(spell) ~= "table" or type(spell.GetSpellTimeSinceLastCast) ~= "function" then
+        return math.huge
+    end
+
+    local sinceLastCast = untaintNumber(protectedCall(spell.GetSpellTimeSinceLastCast, spell), math.huge)
+    if type(sinceLastCast) ~= "number" or sinceLastCast < 0 then
+        return math.huge
+    end
+
+    return sinceLastCast
 end
 
 function Trackers:Initialize()
@@ -153,7 +175,11 @@ function Trackers:RememberOutbreakRequestForGUID(guid, durationSeconds)
         return
     end
 
-    self.outbreakRequestedByGUID[guid] = now() + durationSeconds
+    local requestedAt = now()
+    self.outbreakRequestedByGUID[guid] = {
+        requestedAt = requestedAt,
+        expiresAt = requestedAt + durationSeconds,
+    }
 end
 
 function Trackers:RememberOutbreakRequestForUnit(unitID, durationSeconds)
@@ -173,9 +199,27 @@ end
 
 function Trackers:Poll()
     local currentTime = now()
+    local sinceLastOutbreakCast = getActionSpellTimeSinceLastCast(OUTBREAK_SPELL_ID)
+    local observedOutbreakCastAt = 0
+    if sinceLastOutbreakCast ~= math.huge and sinceLastOutbreakCast <= 12 then
+        observedOutbreakCastAt = math.max(0, currentTime - sinceLastOutbreakCast)
+    end
 
-    for guid, expiresAt in pairs(self.outbreakRequestedByGUID) do
+    for guid, requestState in pairs(self.outbreakRequestedByGUID) do
+        local requestedAt = 0
+        local expiresAt = 0
+        if type(requestState) == "table" then
+            requestedAt = tonumber(requestState.requestedAt) or 0
+            expiresAt = tonumber(requestState.expiresAt) or 0
+        else
+            expiresAt = tonumber(requestState) or 0
+            requestedAt = math.max(0, expiresAt - OUTBREAK_REQUEST_SECONDS)
+        end
+
         if expiresAt <= currentTime then
+            self.outbreakRequestedByGUID[guid] = nil
+        elseif observedOutbreakCastAt > 0 and requestedAt > 0 and observedOutbreakCastAt >= (requestedAt - 0.25) then
+            self:RememberOutbreakForGUID(guid, OUTBREAK_TRACK_SECONDS)
             self.outbreakRequestedByGUID[guid] = nil
         elseif getSpellCooldownRemaining(OUTBREAK_SPELL_ID) > 0 then
             self:RememberOutbreakForGUID(guid, OUTBREAK_TRACK_SECONDS)
@@ -237,7 +281,13 @@ function Trackers:GetTrackedAura(unitID, spellID, filter, sourceUnit)
 
     if expiresAt <= currentTime then
         self.outbreakTrackedByGUID[guid] = nil
-        local requestedUntil = self.outbreakRequestedByGUID[guid] or 0
+        local requestState = self.outbreakRequestedByGUID[guid]
+        local requestedUntil = 0
+        if type(requestState) == "table" then
+            requestedUntil = tonumber(requestState.expiresAt) or 0
+        else
+            requestedUntil = tonumber(requestState) or 0
+        end
         if requestedUntil > currentTime and isOutbreakDiseaseSpell(spellID) then
             return {
                 count = 1,
