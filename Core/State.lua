@@ -180,7 +180,7 @@ local function tryActionPower(unitID, powerType, current, max, pct, currentKnown
             end
         end
 
-        local fallbackPct, fallbackPctKnown = addon:TryActionUnitNumber(unitID, "PowerPercent", pct or 0)
+        local fallbackPct, fallbackPctKnown = addon:TryActionUnitNumber(unitID, "PowerPercent", pct or 0, powerType)
         if not fallbackPctKnown then
             fallbackPct, fallbackPctKnown = addon:TrySecretEngineNumber("GetPowerPercent", pct or 0, unitID, powerType)
         end
@@ -189,7 +189,7 @@ local function tryActionPower(unitID, powerType, current, max, pct, currentKnown
             pctKnown = true
         end
 
-        local fallbackCurrent, fallbackCurrentKnown = addon:TryActionUnitNumber(unitID, "Power", current or 0)
+        local fallbackCurrent, fallbackCurrentKnown = addon:TryActionUnitNumber(unitID, "Power", current or 0, powerType)
         if not fallbackCurrentKnown then
             fallbackCurrent, fallbackCurrentKnown = addon:TrySecretEngineNumber("GetPower", current or 0, unitID, powerType)
         end
@@ -198,7 +198,7 @@ local function tryActionPower(unitID, powerType, current, max, pct, currentKnown
             currentKnown = true
         end
 
-        local fallbackMax, fallbackMaxKnown = addon:TryActionUnitNumber(unitID, "PowerMax", max or 0)
+        local fallbackMax, fallbackMaxKnown = addon:TryActionUnitNumber(unitID, "PowerMax", max or 0, powerType)
         if fallbackMaxKnown and fallbackMax > 0 then
             max = fallbackMax
             maxKnown = true

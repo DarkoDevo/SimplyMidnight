@@ -5,7 +5,7 @@ local Packs = {}
 local packList = {
     {
         key = "deathknight-unholy",
-        version = 4,
+        version = 5,
         class = "DEATHKNIGHT",
         specID = 252,
         name = "Unholy Death Knight",
@@ -26,6 +26,7 @@ local packList = {
                     targetHpBelow = 35,
                 },
                 note = "Soul Reaper execute",
+                overridePrimary = true,
             },
             {
                 spellID = 77575,
@@ -44,6 +45,7 @@ local packList = {
                     },
                 },
                 note = "Apply Virulent Plague",
+                overridePrimary = true,
             },
             {
                 spellID = 77575,
@@ -63,6 +65,7 @@ local packList = {
                     },
                 },
                 note = "Refresh Virulent Plague",
+                overridePrimary = true,
             },
             {
                 spellID = 43265,
@@ -79,6 +82,7 @@ local packList = {
                     modeConserve = false,
                 },
                 note = "AoE setup",
+                overridePrimary = true,
             },
             {
                 spellID = 85948,
@@ -99,6 +103,8 @@ local packList = {
                     },
                 },
                 note = "Build Festering Wounds",
+                decisionGroup = "core",
+                commitMargin = 18,
             },
             {
                 spellID = 85948,
@@ -120,6 +126,8 @@ local packList = {
                     },
                 },
                 note = "Rebuild Festering Wounds",
+                decisionGroup = "core",
+                commitMargin = 18,
             },
             {
                 spellID = 55090,
@@ -141,6 +149,8 @@ local packList = {
                     secondaryAtLeast = 1,
                 },
                 note = "Spend Festering Wounds",
+                decisionGroup = "core",
+                commitMargin = 18,
             },
             {
                 spellID = 207317,
@@ -161,6 +171,8 @@ local packList = {
                     },
                 },
                 note = "AoE runic spender",
+                decisionGroup = "core",
+                commitMargin = 18,
             },
             {
                 spellID = 47541,
@@ -178,6 +190,8 @@ local packList = {
                     },
                 },
                 note = "Sudden Doom proc",
+                decisionGroup = "core",
+                commitMargin = 18,
             },
             {
                 spellID = 47541,
@@ -191,6 +205,8 @@ local packList = {
                     resourceAtLeast = 80,
                 },
                 note = "Spend high Runic Power",
+                decisionGroup = "core",
+                commitMargin = 18,
             },
             {
                 spellID = 55090,
@@ -205,6 +221,8 @@ local packList = {
                     secondaryAtLeast = 1,
                 },
                 note = "Rune spender",
+                decisionGroup = "core",
+                commitMargin = 18,
             },
             {
                 spellID = 47541,
@@ -218,6 +236,8 @@ local packList = {
                     resourceAtLeast = 40,
                 },
                 note = "Runic filler",
+                decisionGroup = "core",
+                commitMargin = 18,
             },
             {
                 spellID = 42650,
@@ -326,6 +346,7 @@ local packList = {
                     playerHpBelow = 55,
                 },
                 note = "Magic mitigation",
+                overridePrimary = true,
             },
             {
                 spellID = 47528,
@@ -339,6 +360,7 @@ local packList = {
                     targetInterruptible = true,
                 },
                 note = "Interrupt",
+                overridePrimary = true,
             },
             {
                 spellID = 48265,

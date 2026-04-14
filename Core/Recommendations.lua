@@ -176,6 +176,25 @@ local function rememberObservedAura(unitID, requestedSpellID, actualSpellID, dur
     addon.Trackers:RememberSpellForUnit(unitID, actualID > 0 and actualID or requestedID, rememberFor)
 end
 
+local function priorityOf(entry)
+    return tonumber(entry and entry.priority) or 0
+end
+
+local function findCandidateBySpellID(candidates, spellID)
+    spellID = tonumber(spellID) or 0
+    if spellID <= 0 or type(candidates) ~= "table" then
+        return nil
+    end
+
+    for _, candidate in ipairs(candidates) do
+        if tonumber(candidate and candidate.spellID) == spellID then
+            return candidate
+        end
+    end
+
+    return nil
+end
+
 local function getAuraObject(unitID, index, filter)
     if type(C_UnitAuras) == "table" and type(C_UnitAuras.GetAuraDataByIndex) == "function" then
         local auraData = protectedCall(C_UnitAuras.GetAuraDataByIndex, unitID, index, filter)
@@ -581,6 +600,81 @@ function Recommendations:Initialize()
         updatedAt = 0,
         slots = {},
     }
+    self.primaryCommit = nil
+end
+
+function Recommendations:ResolveCommittedPrimary(candidates)
+    local topCandidate = candidates and candidates[1] or nil
+    if not topCandidate then
+        self.primaryCommit = nil
+        return nil
+    end
+
+    if not self.primaryCommit or not self.primaryCommit.spellID then
+        self.primaryCommit = {
+            spellID = topCandidate.spellID,
+            entry = topCandidate,
+        }
+        return topCandidate
+    end
+
+    local committedCandidate = findCandidateBySpellID(candidates, self.primaryCommit.spellID)
+    if not committedCandidate then
+        self.primaryCommit = {
+            spellID = topCandidate.spellID,
+            entry = topCandidate,
+        }
+        return topCandidate
+    end
+
+    if tonumber(committedCandidate.spellID) == tonumber(topCandidate.spellID) then
+        self.primaryCommit.entry = topCandidate
+        return topCandidate
+    end
+
+    local sameGroup = committedCandidate.decisionGroup ~= nil and committedCandidate.decisionGroup == topCandidate.decisionGroup
+    local margin = tonumber(committedCandidate.commitMargin or topCandidate.commitMargin) or (sameGroup and 18 or 10)
+
+    if topCandidate.overridePrimary or priorityOf(topCandidate) >= (priorityOf(committedCandidate) + margin) then
+        self.primaryCommit = {
+            spellID = topCandidate.spellID,
+            entry = topCandidate,
+        }
+        return topCandidate
+    end
+
+    self.primaryCommit.entry = committedCandidate
+    return committedCandidate
+end
+
+function Recommendations:ResolvePrimaryOverride(primaryEntry, slotSelections)
+    local overrideEntry = nil
+    local overrideScore = -math.huge
+
+    local interruptEntry = slotSelections.interrupt
+    if interruptEntry and interruptEntry.overridePrimary then
+        overrideEntry = interruptEntry
+        overrideScore = priorityOf(interruptEntry) + 100
+    end
+
+    local defensiveEntry = slotSelections.defensive
+    if defensiveEntry and defensiveEntry.overridePrimary then
+        local defensiveScore = priorityOf(defensiveEntry) + 60
+        if defensiveScore > overrideScore then
+            overrideEntry = defensiveEntry
+            overrideScore = defensiveScore
+        end
+    end
+
+    if not overrideEntry then
+        return primaryEntry
+    end
+
+    if not primaryEntry or overrideScore >= (priorityOf(primaryEntry) + 5) then
+        return overrideEntry
+    end
+
+    return primaryEntry
 end
 
 function Recommendations:Refresh(state, options)
@@ -606,9 +700,11 @@ function Recommendations:Refresh(state, options)
     end
 
     local selectedSpellIDs = {}
+    local slotSelections = {}
 
     for _, slot in ipairs(addon:GetSlotOrder()) do
         local selected = nil
+        local matchedEntries = {}
         local slotDiagnostics = diagnosticsEnabled and {
             rejected = {},
             totalEntries = 0,
@@ -637,17 +733,21 @@ function Recommendations:Refresh(state, options)
             end
 
             if matched then
-                selected = entry
-                selectedSpellIDs[entry.spellID] = true
-                if slotDiagnostics then
-                    slotDiagnostics.selected = {
-                        spellID = entry.spellID,
-                        name = addon:GetSpellName(entry.spellID) or tostring(entry.spellID),
-                        note = entry.note,
-                        priority = entry.priority,
-                    }
+                matchedEntries[#matchedEntries + 1] = entry
+                if not selected then
+                    selected = entry
+                    if slotDiagnostics then
+                        slotDiagnostics.selected = {
+                            spellID = entry.spellID,
+                            name = addon:GetSpellName(entry.spellID) or tostring(entry.spellID),
+                            note = entry.note,
+                            priority = entry.priority,
+                        }
+                    end
+                    if slot ~= "primary" then
+                        break
+                    end
                 end
-                break
             elseif slotDiagnostics and #slotDiagnostics.rejected < 3 then
                 slotDiagnostics.rejected[#slotDiagnostics.rejected + 1] = {
                     spellID = entry.spellID,
@@ -659,6 +759,22 @@ function Recommendations:Refresh(state, options)
             end
         end
 
+        if slot == "primary" then
+            selected = self:ResolveCommittedPrimary(matchedEntries)
+            if slotDiagnostics and selected then
+                slotDiagnostics.selected = {
+                    spellID = selected.spellID,
+                    name = addon:GetSpellName(selected.spellID) or tostring(selected.spellID),
+                    note = selected.note,
+                    priority = selected.priority,
+                }
+            end
+        end
+
+        if selected then
+            selectedSpellIDs[selected.spellID] = true
+        end
+
         if slotDiagnostics then
             if not slotDiagnostics.selected and slotDiagnostics.totalEntries == 0 then
                 slotDiagnostics.empty = true
@@ -667,9 +783,20 @@ function Recommendations:Refresh(state, options)
         end
 
         result.slots[slot] = selected
+        slotSelections[slot] = selected
         if selected and addon.Trackers and addon.Trackers.RememberSuggestion then
             addon.Trackers:RememberSuggestion(selected.spellID, "target")
         end
+    end
+
+    result.slots.primary = self:ResolvePrimaryOverride(result.slots.primary, slotSelections)
+    if result.diagnostics and result.slots.primary then
+        result.diagnostics.slots.primary.selected = {
+            spellID = result.slots.primary.spellID,
+            name = addon:GetSpellName(result.slots.primary.spellID) or tostring(result.slots.primary.spellID),
+            note = result.slots.primary.note,
+            priority = result.slots.primary.priority,
+        }
     end
 
     self.latest = result

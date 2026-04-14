@@ -54,6 +54,9 @@ function Registry:NormalizeEntry(entry)
         packVersion = tonumber(entry.packVersion),
         source = entry.source,
         note = entry.note,
+        decisionGroup = entry.decisionGroup,
+        overridePrimary = entry.overridePrimary == true,
+        commitMargin = tonumber(entry.commitMargin),
     }
 end
 
