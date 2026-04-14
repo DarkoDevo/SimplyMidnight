@@ -158,6 +158,43 @@ local function getFramePath(frame)
     return table.concat(path, ".")
 end
 
+local explicitPlayerPowerBarPaths = {
+    {
+        label = "PlayerFrame.PlayerFrameContent.PlayerFrameContentMain.ManaBarArea.ManaBar",
+        segments = { "PlayerFrameContent", "PlayerFrameContentMain", "ManaBarArea", "ManaBar" },
+        assumedMax = 100,
+        scoreBias = 220,
+    },
+    {
+        label = "PlayerFrame.PlayerFrameContent.PlayerFrameContentMain.PowerBarArea.PowerBar",
+        segments = { "PlayerFrameContent", "PlayerFrameContentMain", "PowerBarArea", "PowerBar" },
+        assumedMax = 100,
+        scoreBias = 200,
+    },
+    {
+        label = "PlayerFrame.PlayerFrameContent.PlayerFrameContentMain.ManaBar",
+        segments = { "PlayerFrameContent", "PlayerFrameContentMain", "ManaBar" },
+        assumedMax = 100,
+        scoreBias = 180,
+    },
+}
+
+local function resolveNestedFrame(root, segments)
+    local current = root
+    for _, segment in ipairs(segments or {}) do
+        if type(current) ~= "table" then
+            return nil
+        end
+
+        current = rawget(current, segment) or current[segment]
+        if current == nil then
+            return nil
+        end
+    end
+
+    return current
+end
+
 local function scorePlayerPowerBarCandidate(frame, path, minValue, maxValue, value, red, green, blue)
     if maxValue <= 5 then
         return -9999
@@ -209,6 +246,134 @@ local function scorePlayerPowerBarCandidate(frame, path, minValue, maxValue, val
     return score
 end
 
+local function buildPlayerPowerBarCandidate(frame, path, assumedMax, scoreBias)
+    if type(frame) ~= "table" then
+        return nil
+    end
+
+    local objectType = type(frame.GetObjectType) == "function" and frame:GetObjectType() or nil
+    if objectType ~= "StatusBar" then
+        return nil
+    end
+
+    if not addon:NormalizeBoolean(protectedCall(frame.IsShown, frame), false) then
+        return nil
+    end
+
+    local value, valueKnown = addon:TryUntaintNumber(protectedCall(frame.GetValue, frame), 0)
+    local minValue, maxValue = protectedCall(frame.GetMinMaxValues, frame)
+    minValue, _ = addon:TryUntaintNumber(minValue, 0)
+    maxValue, maxValueKnown = addon:TryUntaintNumber(maxValue, 0)
+
+    local barWidth = addon:UntaintNumber(protectedCall(frame.GetWidth, frame), 0)
+    local texture = protectedCall(frame.GetStatusBarTexture, frame)
+    local textureWidth = 0
+    if type(texture) == "table" and type(texture.GetWidth) == "function" then
+        textureWidth = addon:UntaintNumber(protectedCall(texture.GetWidth, texture), 0)
+    end
+
+    local fillPct = 0
+    local fillPctKnown = false
+    if barWidth > 20 and textureWidth > 0 then
+        fillPct = math.max(0, math.min(100, (textureWidth / barWidth) * 100))
+        fillPctKnown = true
+    end
+
+    local effectiveMax = 0
+    local effectiveMaxKnown = false
+    if maxValueKnown and maxValue > minValue and maxValue > 0 then
+        effectiveMax = maxValue
+        effectiveMaxKnown = true
+    elseif type(assumedMax) == "number" and assumedMax > 0 then
+        effectiveMax = assumedMax
+        effectiveMaxKnown = true
+    end
+
+    local current = 0
+    local currentKnown = false
+    if valueKnown and effectiveMaxKnown and value >= minValue and value <= effectiveMax then
+        current = value
+        currentKnown = true
+    elseif fillPctKnown and effectiveMaxKnown then
+        current = math.floor((effectiveMax * fillPct / 100) + 0.5)
+        currentKnown = true
+    end
+
+    local pct = 0
+    local pctKnown = false
+    if currentKnown and effectiveMaxKnown and effectiveMax > 0 then
+        pct = percentage(current, effectiveMax)
+        pctKnown = true
+    elseif fillPctKnown then
+        pct = fillPct
+        pctKnown = true
+    end
+
+    if not currentKnown and not pctKnown then
+        return nil
+    end
+
+    local red, green, blue = protectedCall(frame.GetStatusBarColor, frame)
+    red = addon:UntaintNumber(red, 0)
+    green = addon:UntaintNumber(green, 0)
+    blue = addon:UntaintNumber(blue, 0)
+
+    local scoreValue = currentKnown and current or math.floor(((effectiveMaxKnown and effectiveMax or 100) * (pctKnown and pct or 0) / 100) + 0.5)
+    local scoreMax = effectiveMaxKnown and effectiveMax or 0
+    local score = scorePlayerPowerBarCandidate(frame, path, minValue, scoreMax, scoreValue, red, green, blue)
+    if type(scoreBias) == "number" then
+        score = score + scoreBias
+    end
+
+    if fillPctKnown and not valueKnown then
+        score = score + 40
+    end
+
+    if effectiveMaxKnown and not maxValueKnown then
+        score = score + 25
+    end
+
+    return {
+        current = current,
+        max = effectiveMax,
+        pct = pct,
+        path = path or getFramePath(frame),
+        score = score,
+        source = (valueKnown and maxValueKnown and "value") or (fillPctKnown and "texture") or "mixed",
+        color = {
+            red = red,
+            green = green,
+            blue = blue,
+        },
+        width = barWidth,
+        fillWidth = textureWidth,
+    }
+end
+
+local function addPlayerPowerBarCandidate(candidates, bestSnapshot, bestScore, frame, path, assumedMax, scoreBias)
+    local candidate = buildPlayerPowerBarCandidate(frame, path, assumedMax, scoreBias)
+    if not candidate then
+        return bestSnapshot, bestScore
+    end
+
+    candidates[#candidates + 1] = candidate
+    if (candidate.score or -999999) > bestScore then
+        bestSnapshot = {
+            current = candidate.current,
+            max = candidate.max,
+            pct = candidate.pct,
+            path = candidate.path,
+            score = candidate.score,
+            source = candidate.source,
+            width = candidate.width,
+            fillWidth = candidate.fillWidth,
+        }
+        bestScore = candidate.score or bestScore
+    end
+
+    return bestSnapshot, bestScore
+end
+
 local function getPlayerPowerBarSnapshot()
     local currentTime = type(GetTime) == "function" and GetTime() or 0
     if playerPowerBarCache.snapshot and playerPowerBarCache.expiresAt > currentTime then
@@ -230,6 +395,19 @@ local function getPlayerPowerBarSnapshot()
     local candidates = {}
     local index = 1
 
+    for _, probe in ipairs(explicitPlayerPowerBarPaths) do
+        local frame = resolveNestedFrame(root, probe.segments)
+        bestSnapshot, bestScore = addPlayerPowerBarCandidate(
+            candidates,
+            bestSnapshot,
+            bestScore,
+            frame,
+            probe.label,
+            probe.assumedMax,
+            probe.scoreBias
+        )
+    end
+
     while queue[index] do
         local frame = queue[index]
         index = index + 1
@@ -241,43 +419,16 @@ local function getPlayerPowerBarSnapshot()
             end
         end
 
-        if type(frame.GetObjectType) == "function" and frame:GetObjectType() == "StatusBar" and addon:NormalizeBoolean(protectedCall(frame.IsShown, frame), false) then
-            local value = addon:UntaintNumber(protectedCall(frame.GetValue, frame), -1)
-            local minValue, maxValue = protectedCall(frame.GetMinMaxValues, frame)
-            minValue = addon:UntaintNumber(minValue, 0)
-            maxValue = addon:UntaintNumber(maxValue, 0)
-            if value >= 0 and maxValue > minValue then
-                local red, green, blue = protectedCall(frame.GetStatusBarColor, frame)
-                red = addon:UntaintNumber(red, 0)
-                green = addon:UntaintNumber(green, 0)
-                blue = addon:UntaintNumber(blue, 0)
-                local path = getFramePath(frame)
-                local score = scorePlayerPowerBarCandidate(frame, path, minValue, maxValue, value, red, green, blue)
-                if score > -5000 then
-                    candidates[#candidates + 1] = {
-                        current = value,
-                        max = maxValue,
-                        pct = percentage(value, maxValue),
-                        path = path,
-                        score = score,
-                        color = {
-                            red = red,
-                            green = green,
-                            blue = blue,
-                        },
-                    }
-                end
-                if score > bestScore then
-                    bestScore = score
-                    bestSnapshot = {
-                        current = value,
-                        max = maxValue,
-                        pct = percentage(value, maxValue),
-                        path = path,
-                        score = score,
-                    }
-                end
-            end
+        if type(frame.GetObjectType) == "function" and frame:GetObjectType() == "StatusBar" then
+            bestSnapshot, bestScore = addPlayerPowerBarCandidate(
+                candidates,
+                bestSnapshot,
+                bestScore,
+                frame,
+                getFramePath(frame),
+                100,
+                0
+            )
         end
     end
 
@@ -564,6 +715,9 @@ local function getPlayerPrimaryPowerDebug(classTag, powerType)
     debug.frameCurrent = frameSnapshot and frameSnapshot.current or nil
     debug.frameMax = frameSnapshot and frameSnapshot.max or nil
     debug.framePath = frameSnapshot and frameSnapshot.path or nil
+    debug.frameSource = frameSnapshot and frameSnapshot.source or nil
+    debug.frameWidth = frameSnapshot and frameSnapshot.width or nil
+    debug.frameFillWidth = frameSnapshot and frameSnapshot.fillWidth or nil
     debug.frameCandidates = playerPowerBarCache.candidates
 
     local secretTyped, secretTypedKnown = addon:TrySecretEngineNumber("GetPower", 0, "player", powerType)

@@ -88,9 +88,12 @@ local function printDiagnostics()
 
             if primaryDebug.framePath then
                 addon:Print(string.format(
-                    "pwrui cur=%s max=%s path=%s",
+                    "pwrui cur=%s max=%s src=%s w=%s fill=%s path=%s",
                     fmt(primaryDebug.frameCurrent),
                     fmt(primaryDebug.frameMax),
+                    tostring(primaryDebug.frameSource or "?"),
+                    fmt(primaryDebug.frameWidth),
+                    fmt(primaryDebug.frameFillWidth),
                     tostring(primaryDebug.framePath)
                 ))
             end
@@ -101,11 +104,14 @@ local function printDiagnostics()
                     local candidate = frameCandidates[index]
                     if type(candidate) == "table" then
                         addon:Print(string.format(
-                            "pwrui%d score=%s cur=%s max=%s rgb=%s/%s/%s path=%s",
+                            "pwrui%d score=%s cur=%s max=%s src=%s w=%s fill=%s rgb=%s/%s/%s path=%s",
                             index,
                             fmt(candidate.score),
                             fmt(candidate.current),
                             fmt(candidate.max),
+                            tostring(candidate.source or "?"),
+                            fmt(candidate.width),
+                            fmt(candidate.fillWidth),
                             fmt(candidate.color and candidate.color.red and math.floor((candidate.color.red or 0) * 100 + 0.5) or 0),
                             fmt(candidate.color and candidate.color.green and math.floor((candidate.color.green or 0) * 100 + 0.5) or 0),
                             fmt(candidate.color and candidate.color.blue and math.floor((candidate.color.blue or 0) * 100 + 0.5) or 0),
