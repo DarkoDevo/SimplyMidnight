@@ -452,8 +452,10 @@ local function buildPlayerPowerBarCandidate(frame, path, assumedMax, scoreBias)
         return nil
     end
 
-    local objectType = type(frame.GetObjectType) == "function" and frame:GetObjectType() or nil
-    if objectType ~= "StatusBar" then
+    local hasStatusMethods = type(frame.GetValue) == "function"
+        or type(frame.GetMinMaxValues) == "function"
+        or type(frame.GetStatusBarTexture) == "function"
+    if not hasStatusMethods then
         return nil
     end
 
@@ -461,13 +463,21 @@ local function buildPlayerPowerBarCandidate(frame, path, assumedMax, scoreBias)
         return nil
     end
 
-    local value, valueKnown = addon:TryUntaintNumber(protectedCall(frame.GetValue, frame), 0)
-    local minValue, maxValue = protectedCall(frame.GetMinMaxValues, frame)
-    minValue, _ = addon:TryUntaintNumber(minValue, 0)
-    maxValue, maxValueKnown = addon:TryUntaintNumber(maxValue, 0)
+    local value, valueKnown = 0, false
+    if type(frame.GetValue) == "function" then
+        value, valueKnown = addon:TryUntaintNumber(protectedCall(frame.GetValue, frame), 0)
+    end
+
+    local minValue, maxValue = 0, 0
+    local maxValueKnown = false
+    if type(frame.GetMinMaxValues) == "function" then
+        minValue, maxValue = protectedCall(frame.GetMinMaxValues, frame)
+        minValue, _ = addon:TryUntaintNumber(minValue, 0)
+        maxValue, maxValueKnown = addon:TryUntaintNumber(maxValue, 0)
+    end
 
     local barWidth = addon:UntaintNumber(protectedCall(frame.GetWidth, frame), 0)
-    local texture = protectedCall(frame.GetStatusBarTexture, frame)
+    local texture = type(frame.GetStatusBarTexture) == "function" and protectedCall(frame.GetStatusBarTexture, frame) or nil
     local textureWidth = 0
     if type(texture) == "table" and type(texture.GetWidth) == "function" then
         textureWidth = addon:UntaintNumber(protectedCall(texture.GetWidth, texture), 0)
@@ -674,7 +684,7 @@ local function getPlayerPowerBarSnapshot()
             end
         end
 
-        if type(frame.GetObjectType) == "function" and frame:GetObjectType() == "StatusBar" then
+        if type(frame.GetValue) == "function" or type(frame.GetMinMaxValues) == "function" or type(frame.GetStatusBarTexture) == "function" then
             bestSnapshot, bestScore = addPlayerPowerBarCandidate(
                 candidates,
                 bestSnapshot,
