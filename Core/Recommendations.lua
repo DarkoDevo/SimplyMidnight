@@ -123,33 +123,117 @@ local function fail(reason)
     return false, reason
 end
 
+local function getAuraObject(unitID, index, filter)
+    if type(C_UnitAuras) == "table" and type(C_UnitAuras.GetAuraDataByIndex) == "function" then
+        local auraData = protectedCall(C_UnitAuras.GetAuraDataByIndex, unitID, index, filter)
+        return addon:NormalizeAuraData(auraData)
+    end
+
+    if type(UnitAura) == "function" then
+        local name, icon, count, dispelType, duration, expirationTime, sourceUnit, isStealable, nameplateShowPersonal, spellId, canApplyAura, isBossAura = protectedCall(UnitAura, unitID, index, filter)
+        if name == nil and spellId == nil then
+            return nil
+        end
+
+        return addon:NormalizeAuraData({
+            name = name,
+            icon = icon,
+            applications = count,
+            dispelName = dispelType,
+            duration = duration,
+            expirationTime = expirationTime,
+            sourceUnit = sourceUnit,
+            isStealable = isStealable,
+            nameplateShowPersonal = nameplateShowPersonal,
+            spellId = spellId,
+            canApplyAura = canApplyAura,
+            isBossAura = isBossAura,
+        })
+    end
+
+    return nil
+end
+
+local function tryActionAuraLookup(unitID, spellID, filter, sourceUnit)
+    local unit = addon:GetActionUnit(unitID)
+    if not unit then
+        return nil
+    end
+
+    local sourceIsPlayer = sourceUnit and unitExists(sourceUnit) and unitIsUnit(sourceUnit, "player") or false
+    local isHelpful = tostring(filter or ""):upper():find("HELPFUL", 1, true) ~= nil
+    local remainMethodName = isHelpful and "HasBuffs" or "HasDeBuffs"
+    local stacksMethodName = isHelpful and "HasBuffsStacks" or "HasDeBuffsStacks"
+    local remainMethod = unit[remainMethodName]
+    local stacksMethod = unit[stacksMethodName]
+    if type(remainMethod) ~= "function" then
+        return nil
+    end
+
+    local okRemain, remain, duration = pcall(remainMethod, unit, spellID, sourceIsPlayer, true)
+    if not okRemain then
+        return nil
+    end
+
+    remain = addon:UntaintNumber(remain, 0)
+    duration = addon:UntaintNumber(duration, 0)
+    if remain <= 0 and duration <= 0 then
+        return nil
+    end
+
+    local count = 0
+    if type(stacksMethod) == "function" then
+        local okStacks, stacks = pcall(stacksMethod, unit, spellID, sourceIsPlayer, true)
+        if okStacks then
+            count = addon:UntaintNumber(stacks, 0)
+        end
+    end
+
+    local expirationTime = 0
+    if remain > 0 and remain < math.huge then
+        expirationTime = GetTime() + remain
+    end
+
+    return {
+        count = count > 0 and count or 1,
+        duration = duration,
+        expirationTime = expirationTime,
+        remaining = remain == math.huge and 0 or remain,
+        source = sourceIsPlayer and "player" or nil,
+    }
+end
+
 local function readAura(unitID, spellID, filter, sourceUnit)
-    if not unitID or not spellID or not unitExists(unitID) or type(UnitAura) ~= "function" then
+    if not unitID or not spellID or not unitExists(unitID) then
         return nil
     end
 
     for index = 1, 40 do
-        local name, _, count, _, duration, expirationTime, source, _, _, auraSpellID = protectedCall(UnitAura, unitID, index, filter)
-        local auraName = addon:NormalizeString(name)
-        local normalizedSpellID = addon:UntaintNumber(auraSpellID, 0)
-        if not auraName and normalizedSpellID <= 0 then
+        local auraData = getAuraObject(unitID, index, filter)
+        local normalizedSpellID = auraData and addon:UntaintNumber(auraData.spellId or auraData.spellID, 0) or 0
+        local auraName = auraData and addon:NormalizeString(auraData.name) or nil
+        if not auraData or (not auraName and normalizedSpellID <= 0) then
             break
         end
 
         if normalizedSpellID == spellID then
-            local sourceToken = addon:NormalizeString(source)
+            local sourceToken = addon:NormalizeString(auraData.sourceUnit or auraData.unitCaster)
             if sourceUnit and (not sourceToken or not unitExists(sourceUnit) or not unitIsUnit(sourceToken, sourceUnit)) then
                 -- Keep scanning until we find the aura from the requested source.
             else
                 local remaining = 0
-                local normalizedExpirationTime = addon:UntaintNumber(expirationTime, 0)
+                local normalizedExpirationTime = addon:UntaintNumber(auraData.expirationTime, 0)
                 if normalizedExpirationTime > 0 then
                     remaining = math.max(normalizedExpirationTime - GetTime(), 0)
                 end
+                local count = addon:UntaintNumber(auraData.applications, 0)
+                if count <= 0 then
+                    count = 1
+                end
 
                 return {
-                    count = addon:UntaintNumber(count, 0),
-                    duration = addon:UntaintNumber(duration, 0),
+                    count = count,
+                    duration = addon:UntaintNumber(auraData.duration, 0),
                     expirationTime = normalizedExpirationTime,
                     remaining = remaining,
                     source = sourceToken,
@@ -158,7 +242,7 @@ local function readAura(unitID, spellID, filter, sourceUnit)
         end
     end
 
-    return nil
+    return tryActionAuraLookup(unitID, spellID, filter, sourceUnit)
 end
 
 local function matchesAuraList(conditionList, predicate)

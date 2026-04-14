@@ -183,6 +183,27 @@ function addon:NormalizeString(value)
     return normalized
 end
 
+function addon:NormalizeAuraData(auraData)
+    if auraData == nil then
+        return nil
+    end
+
+    local compat = self:GetCompatLayer()
+    if compat and type(compat.NormalizeAuraData) == "function" then
+        local ok, normalized = pcall(compat.NormalizeAuraData, compat, auraData)
+        if ok and normalized then
+            return normalized
+        end
+
+        ok, normalized = pcall(compat.NormalizeAuraData, auraData)
+        if ok and normalized then
+            return normalized
+        end
+    end
+
+    return auraData
+end
+
 function addon:TryCompatUnwrap(value)
     if value == nil then
         return nil, true
