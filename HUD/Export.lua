@@ -33,6 +33,57 @@ local function setBar(texture, valuePct)
     texture:SetWidth((texture.__maxWidth or 1) * (valuePct / 100))
 end
 
+local function shortText(value, limit)
+    value = tostring(value or "-")
+    limit = tonumber(limit) or 24
+    if #value <= limit then
+        return value
+    end
+
+    if limit <= 3 then
+        return string.sub(value, 1, limit)
+    end
+
+    return string.sub(value, 1, limit - 3) .. "..."
+end
+
+local function shortBool(value)
+    return value and "Y" or "N"
+end
+
+local function statusTag(isKnown)
+    return isKnown and "OK" or "UNK"
+end
+
+local function formatPct(value, isKnown)
+    if not isKnown then
+        return "?"
+    end
+
+    value = tonumber(value) or 0
+    return string.format("%.1f%%", value)
+end
+
+local function formatResourceLine(label, current, pct, isKnown)
+    if not isKnown then
+        return string.format("%s=? [%s]", label, statusTag(false))
+    end
+
+    return string.format("%s=%s (%d) [%s]", label, formatPct(pct, true), tonumber(current) or 0, statusTag(true))
+end
+
+local function getSlotShortLabel(slot)
+    return string.upper(string.sub(slot or "?", 1, 1))
+end
+
+local function getEntryName(entry)
+    if not entry or not entry.spellID then
+        return "-"
+    end
+
+    return addon:GetSpellName(entry.spellID) or tostring(entry.spellID)
+end
+
 function ExportHUD:SavePosition()
     local point, _, relativePoint, xOfs, yOfs = self.frame:GetPoint(1)
     addon.db.hud.point = point
@@ -115,6 +166,64 @@ function ExportHUD:CreateBar(labelText, yOffset, color)
     return fill
 end
 
+function ExportHUD:CreateDebugPanel()
+    self.debugPanel = createBackdropFrame(nil, self.frame)
+    self.debugPanel:SetPoint("TOPLEFT", self.frame, "BOTTOMLEFT", 0, -4)
+    self.debugPanel:SetSize(390, 126)
+    self.debugPanel:Hide()
+
+    self.debugLines = {}
+    for index = 1, 7 do
+        local line = self.debugPanel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        line:SetPoint("TOPLEFT", self.debugPanel, "TOPLEFT", 10, -8 - ((index - 1) * 16))
+        line:SetJustifyH("LEFT")
+        line:SetWidth(370)
+        self.debugLines[index] = line
+    end
+end
+
+function ExportHUD:GetDiagnosticLines(state, recommendations)
+    local diagnostics = recommendations and recommendations.diagnostics and recommendations.diagnostics.slots or {}
+    local compatStatus = addon.Compatibility and addon.Compatibility:GetStatusLine() or "compat: unavailable"
+    local adapterStatus = addon.SimplyGladAdapter and addon.SimplyGladAdapter:GetStatusLine() or "adapter: unavailable"
+    local taintStatus = addon.TaintGuard and addon.TaintGuard:GetStatusLine() or "taint: unavailable"
+    local packLabel = addon.Registry and addon.Registry:GetCurrentPackLabel() or "unknown pack"
+    local uiScale = (UIParent and UIParent.GetEffectiveScale and UIParent:GetEffectiveScale()) or 1
+
+    local slotLine = {}
+    local reasonLine = {}
+    for _, slot in ipairs(addon:GetSlotOrder()) do
+        local slotKey = getSlotShortLabel(slot)
+        local selectedEntry = recommendations and recommendations.slots and recommendations.slots[slot] or nil
+        local slotDiagnostics = diagnostics and diagnostics[slot] or nil
+        local chosenName = shortText(getEntryName(selectedEntry), 14)
+        slotLine[#slotLine + 1] = string.format("%s=%s", slotKey, chosenName)
+
+        local slotMessage = "-"
+        if slotDiagnostics and slotDiagnostics.selected and slotDiagnostics.selected.note then
+            slotMessage = shortText(slotDiagnostics.selected.note, 18)
+        elseif slotDiagnostics and slotDiagnostics.rejected and slotDiagnostics.rejected[1] then
+            slotMessage = shortText(slotDiagnostics.rejected[1].reason, 18)
+        elseif slotDiagnostics and slotDiagnostics.empty then
+            slotMessage = "no entries"
+        elseif recommendations and recommendations.diagnostics and recommendations.diagnostics.paused then
+            slotMessage = "paused"
+        end
+
+        reasonLine[#reasonLine + 1] = string.format("%s:%s", slotKey, slotMessage)
+    end
+
+    return {
+        string.format("pack=%s | spec=%s | mode=%s | enemies=%d", shortText(packLabel, 26), tostring(state.player.specID or "-"), tostring(state.mode or "-"), tonumber(state.environment.enemyCount) or 0),
+        string.format("player c=%s mv=%s mt=%s pet=%s/%s | modes b=%s c=%s h=%s p=%s", shortBool(state.player.inCombat), shortBool(state.player.moving), shortBool(state.player.mounted), shortBool(state.player.petExists), shortBool(state.player.petAlive), shortBool(state.modes.burst), shortBool(state.modes.conserve), shortBool(state.modes.hold), shortBool(state.modes.pause)),
+        string.format("target ex=%s al=%s ho=%s rg=%s cast=%s int=%s hp=%s [%s]", shortBool(state.target.exists), shortBool(state.target.alive), shortBool(state.target.hostile), tostring(state.target.rangeBucket or "-"), shortBool(state.target.casting), shortBool(state.target.interruptible), formatPct(state.target.healthPct, state.target.healthKnown), statusTag(state.target.healthKnown)),
+        string.format("self hp=%s [%s] | %s | %s", formatPct(state.player.healthPct, state.player.healthKnown), statusTag(state.player.healthKnown), formatResourceLine("pwr", state.player.primaryCurrent, state.player.primaryPct, state.player.primaryKnown), formatResourceLine("sec", state.player.secondaryCurrent, state.player.secondaryPct, state.player.secondaryKnown)),
+        table.concat(slotLine, " | "),
+        table.concat(reasonLine, " | "),
+        string.format("hud=%.2f ui=%.2f | %s | %s | %s", tonumber(addon.db.hud.scale) or 1, uiScale, compatStatus, adapterStatus, taintStatus),
+    }
+end
+
 function ExportHUD:Initialize()
     if self.frame then
         return
@@ -122,6 +231,7 @@ function ExportHUD:Initialize()
 
     self.frame = createBackdropFrame("SimplyMidnightExportFrame", UIParent)
     self.frame:SetSize(390, 132)
+    self.frame:SetClampedToScreen(true)
     self.frame:SetMovable(true)
     self.frame:RegisterForDrag("LeftButton")
     self.frame:SetScript("OnDragStart", function(frame)
@@ -169,10 +279,7 @@ function ExportHUD:Initialize()
     self.targetBar = self:CreateBar("TGT", -96, { 0.95, 0.25, 0.25 })
     self.resourceBar = self:CreateBar("PWR", -114, { 0.25, 0.65, 1.0 })
 
-    self.debugText = self.frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    self.debugText:SetPoint("BOTTOMLEFT", self.frame, "BOTTOMLEFT", 10, 8)
-    self.debugText:SetJustifyH("LEFT")
-    self.debugText:SetWidth(360)
+    self:CreateDebugPanel()
 
     self:ApplyPosition()
     self:SetLocked(addon.db.hud.locked)
@@ -236,14 +343,13 @@ function ExportHUD:Render(state, recommendations)
     setBar(self.resourceBar, state.player.primaryPct)
 
     if addon.session.debug then
-        local compatStatus = addon.Compatibility and addon.Compatibility:GetStatusLine() or "compat: unavailable"
-        local adapterStatus = addon.SimplyGladAdapter and addon.SimplyGladAdapter:GetStatusLine() or "adapter: unavailable"
-        local taintStatus = addon.TaintGuard and addon.TaintGuard:GetStatusLine() or "taint: unavailable"
-        local packLabel = addon.Registry and addon.Registry:GetCurrentPackLabel() or "unknown pack"
-        self.debugText:SetText(string.format("%s | enemies=%d | %s | %s | %s", packLabel, state.environment.enemyCount or 0, compatStatus, adapterStatus, taintStatus))
-        self.debugText:Show()
+        local lines = self:GetDiagnosticLines(state, recommendations)
+        for index = 1, #self.debugLines do
+            self.debugLines[index]:SetText(lines[index] or "")
+        end
+        self.debugPanel:Show()
     else
-        self.debugText:Hide()
+        self.debugPanel:Hide()
     end
 end
 

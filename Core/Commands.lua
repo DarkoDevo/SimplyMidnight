@@ -18,7 +18,7 @@ local function printHelp()
     addon:Print("Commands: /sm help | /sm config | /sm burst [seconds] | /sm hold [seconds]")
     addon:Print("/sm conserve on|off|toggle | /sm pause on|off|toggle | /sm debug on|off")
     addon:Print("/sm overlay on|off | /sm hud lock|unlock | /sm add <spellID> [slot] [priority] | /sm list")
-    addon:Print("/sm defaults | /sm reset | /sm compat")
+    addon:Print("/sm defaults | /sm reset | /sm compat | /sm diag")
 end
 
 local function printRegistry()
@@ -45,6 +45,27 @@ local function printCompatibility()
     else
         addon:Print("SimplyGlad: not detected")
     end
+end
+
+local function printDiagnostics()
+    local state = addon.State and addon.State:Refresh() or nil
+    local recommendations = addon.Recommendations and addon.Recommendations:Refresh(state, { diagnostics = true }) or nil
+    if not state or not recommendations then
+        addon:Print("Diagnostics unavailable")
+        return
+    end
+
+    if addon.ExportHUD and addon.ExportHUD.GetDiagnosticLines then
+        local lines = addon.ExportHUD:GetDiagnosticLines(state, recommendations)
+        for _, line in ipairs(lines or {}) do
+            if line and line ~= "" then
+                addon:Print(line)
+            end
+        end
+        return
+    end
+
+    addon:Print("Diagnostics generated but HUD formatter is unavailable")
 end
 
 local function refreshConfigIfShown()
@@ -124,6 +145,8 @@ function Commands:Initialize()
             printRegistry()
         elseif command == "compat" then
             printCompatibility()
+        elseif command == "diag" then
+            printDiagnostics()
         else
             addon:Print("Unknown command: " .. tostring(command))
             printHelp()
