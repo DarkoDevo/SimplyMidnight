@@ -501,6 +501,9 @@ function addon:InitializeModules()
     if self.Compatibility and self.Compatibility.Initialize then
         self.Compatibility:Initialize()
     end
+    if self.Trackers and self.Trackers.Initialize then
+        self.Trackers:Initialize()
+    end
     if self.Registry and self.Registry.Initialize then
         self.Registry:Initialize()
     end

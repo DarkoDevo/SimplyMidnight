@@ -242,6 +242,11 @@ local function readAura(unitID, spellID, filter, sourceUnit)
         end
     end
 
+    local trackedAura = addon.Trackers and addon.Trackers.GetTrackedAura and addon.Trackers:GetTrackedAura(unitID, spellID, filter, sourceUnit) or nil
+    if trackedAura then
+        return trackedAura
+    end
+
     return tryActionAuraLookup(unitID, spellID, filter, sourceUnit)
 end
 

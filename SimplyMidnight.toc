@@ -2,7 +2,7 @@
 ## Title: SimplyMidnight
 ## Notes: Spell suggestion HUD and external overlay bridge for Midnight.
 ## Author: DarkoDevo
-## Version: 0.2.13
+## Version: 0.2.14
 ## SavedVariables: SimplyMidnightDB
 ## OptionalDeps: TellMeWhen, SimplyGlad
 
@@ -10,6 +10,7 @@ SimplyMidnight.lua
 Core/Addon.lua
 Core/TaintGuard.lua
 Core/Compatibility.lua
+Core/Trackers.lua
 Core/State.lua
 Core/Packs.lua
 Core/Registry.lua
