@@ -200,6 +200,19 @@ local function tryActionPower(unitID, powerType, current, max, pct, currentKnown
             end
             typedPowerSignal = typedPowerSignal or playerPctKnown
 
+            local playerDeficit, playerDeficitKnown = addon:TryActionPlayerNumber("RunicPowerDeficit", 0)
+            if playerDeficitKnown then
+                if not maxKnown or (max or 0) <= 0 then
+                    max = 100
+                    maxKnown = true
+                end
+
+                local derivedCurrent = math.max(0, (max or 100) - math.max(0, tonumber(playerDeficit) or 0))
+                current, currentKnown = preferPositiveNumber(current, currentKnown, derivedCurrent, true)
+                pct, pctKnown = preferPositiveNumber(pct, pctKnown, percentage(derivedCurrent, max or 100), true)
+                typedPowerSignal = true
+            end
+
             local rawUntypedCurrent, rawUntypedCurrentKnown = addon:TryUntaintNumber(protectedCall(UnitPower, unitID), 0)
             current, currentKnown = preferPositiveNumber(current, currentKnown, rawUntypedCurrent, rawUntypedCurrentKnown)
 
@@ -323,6 +336,9 @@ local function getPlayerPrimaryPowerDebug(classTag, powerType)
 
     local actionPlayer, actionPlayerKnown = addon:TryActionPlayerNumber("RunicPower", 0)
     debug.actionPlayer = actionPlayerKnown and actionPlayer or nil
+
+    local actionDeficit, actionDeficitKnown = addon:TryActionPlayerNumber("RunicPowerDeficit", 0)
+    debug.actionDeficit = actionDeficitKnown and actionDeficit or nil
 
     local actionUnit, actionUnitKnown = addon:TryActionUnitNumber("player", "Power", 0)
     debug.actionUnit = actionUnitKnown and actionUnit or nil

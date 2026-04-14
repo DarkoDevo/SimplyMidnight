@@ -741,9 +741,6 @@ function Recommendations:ResolveCommittedPrimary(candidates, state)
     local topCandidate = candidates and candidates[1] or nil
     local fingerprint = state and buildPrimaryDecisionFingerprint(state) or nil
     if not topCandidate then
-        if self.primaryCommit and self.primaryCommit.fingerprint and self.primaryCommit.fingerprint == fingerprint then
-            return self.primaryCommit.entry
-        end
         self.primaryCommit = nil
         return nil
     end
@@ -757,13 +754,14 @@ function Recommendations:ResolveCommittedPrimary(candidates, state)
         return topCandidate
     end
 
+    local committedCandidate = findCandidateBySpellID(candidates, self.primaryCommit.spellID)
+
     if self.primaryCommit.fingerprint and self.primaryCommit.fingerprint == fingerprint and self.primaryCommit.entry then
-        if not topCandidate.overridePrimary then
+        if committedCandidate and not topCandidate.overridePrimary then
             return self.primaryCommit.entry
         end
     end
 
-    local committedCandidate = findCandidateBySpellID(candidates, self.primaryCommit.spellID)
     if not committedCandidate then
         self.primaryCommit = {
             spellID = topCandidate.spellID,

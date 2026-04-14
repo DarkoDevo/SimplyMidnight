@@ -3,6 +3,9 @@ local _, addon = ...
 local Trackers = {
     outbreakTrackedByGUID = {},
     outbreakRequestedByGUID = {},
+    lastObservedOutbreakSinceLastCast = math.huge,
+    lastObservedOutbreakCastAt = 0,
+    lastObservedOutbreakTargetGUID = nil,
 }
 
 local OUTBREAK_SPELL_ID = 77575
@@ -109,6 +112,9 @@ function Trackers:Initialize()
     self.initialized = true
     self.outbreakTrackedByGUID = {}
     self.outbreakRequestedByGUID = {}
+    self.lastObservedOutbreakSinceLastCast = math.huge
+    self.lastObservedOutbreakCastAt = 0
+    self.lastObservedOutbreakTargetGUID = nil
 end
 
 function Trackers:RememberSpellForGUID(guid, spellID, durationSeconds)
@@ -215,6 +221,15 @@ function Trackers:Poll()
     local observedOutbreakCastAt = 0
     if sinceLastOutbreakCast ~= math.huge and sinceLastOutbreakCast <= 12 then
         observedOutbreakCastAt = math.max(0, currentTime - sinceLastOutbreakCast)
+
+        if sinceLastOutbreakCast + 0.2 < (tonumber(self.lastObservedOutbreakSinceLastCast) or math.huge) then
+            self.lastObservedOutbreakCastAt = observedOutbreakCastAt
+            self.lastObservedOutbreakTargetGUID = unitGUID("target")
+        end
+
+        self.lastObservedOutbreakSinceLastCast = sinceLastOutbreakCast
+    else
+        self.lastObservedOutbreakSinceLastCast = math.huge
     end
 
     for guid, requestState in pairs(self.outbreakRequestedByGUID) do
@@ -292,6 +307,21 @@ function Trackers:GetTrackedAura(unitID, spellID, filter, sourceUnit)
     end
 
     if expiresAt <= currentTime then
+        local recentObservedCastAt = tonumber(self.lastObservedOutbreakCastAt) or 0
+        if isOutbreakDiseaseSpell(spellID) and recentObservedCastAt > 0 and guid == self.lastObservedOutbreakTargetGUID then
+            local recentRemaining = OUTBREAK_TRACK_SECONDS - math.max(0, currentTime - recentObservedCastAt)
+            if recentRemaining > 0 then
+                self:RememberOutbreakForGUID(guid, recentRemaining)
+                tracked = self.outbreakTrackedByGUID[guid]
+                expiresAt = tracked and tracked[tonumber(spellID)] or 0
+                for index = 1, #OUTBREAK_DISEASE_IDS do
+                    expiresAt = math.max(expiresAt, tracked and tracked[OUTBREAK_DISEASE_IDS[index]] or 0)
+                end
+            end
+        end
+    end
+
+    if expiresAt <= currentTime then
         self.outbreakTrackedByGUID[guid] = nil
         local requestState = self.outbreakRequestedByGUID[guid]
         local requestedUntil = 0
@@ -332,6 +362,7 @@ function Trackers:GetDebugSnapshot(unitID, spellID)
         cooldownRemaining = getSpellCooldownRemaining(OUTBREAK_SPELL_ID),
         requestRemaining = 0,
         trackedRemaining = 0,
+        observedTarget = self.lastObservedOutbreakTargetGUID,
     }
 
     local guid = unitGUID(unitID)
