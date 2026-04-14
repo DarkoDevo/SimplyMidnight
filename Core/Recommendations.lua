@@ -35,6 +35,10 @@ local function unitIsUnit(leftUnitID, rightUnitID)
     return addon:NormalizeBoolean(protectedCall(UnitIsUnit, leftUnitID, rightUnitID), false)
 end
 
+local function unitGUID(unitID)
+    return addon:NormalizeString(protectedCall(UnitGUID, unitID))
+end
+
 local function getCooldownRemaining(spellID)
     if type(C_Spell) == "table" and type(C_Spell.GetSpellCooldown) == "function" then
         local info = protectedCall(C_Spell.GetSpellCooldown, spellID)
@@ -177,6 +181,31 @@ local function rememberObservedAura(unitID, requestedSpellID, actualSpellID, dur
     addon.Trackers:RememberSpellForUnit(unitID, actualID > 0 and actualID or requestedID, rememberFor)
 end
 
+local function getMatchingNameplateUnitID(unitID)
+    if type(unitID) ~= "string" then
+        return nil
+    end
+
+    local guid = unitGUID(unitID)
+    if not guid then
+        return nil
+    end
+
+    if type(C_NamePlate) ~= "table" or type(C_NamePlate.GetNamePlates) ~= "function" then
+        return nil
+    end
+
+    local nameplates = protectedCall(C_NamePlate.GetNamePlates, false) or {}
+    for _, plate in ipairs(nameplates) do
+        local plateUnitID = addon:NormalizeString(plate and plate.namePlateUnitToken)
+        if plateUnitID and plateUnitID ~= unitID and unitGUID(plateUnitID) == guid then
+            return plateUnitID
+        end
+    end
+
+    return nil
+end
+
 local function priorityOf(entry)
     return tonumber(entry and entry.priority) or 0
 end
@@ -273,27 +302,40 @@ local function getAuraObject(unitID, index, filter)
 end
 
 local function tryActionAuraLookup(unitID, spellID, filter, sourceUnit)
-    local unit = addon:GetActionUnit(unitID)
-    if not unit then
-        return nil
-    end
-
     local sourceIsPlayer = sourceUnit and unitExists(sourceUnit) and unitIsUnit(sourceUnit, "player") or false
     local isHelpful = tostring(filter or ""):upper():find("HELPFUL", 1, true) ~= nil
     local remainMethodName = isHelpful and "HasBuffs" or "HasDeBuffs"
     local stacksMethodName = isHelpful and "HasBuffsStacks" or "HasDeBuffsStacks"
-    local remainMethod = unit[remainMethodName]
-    local stacksMethod = unit[stacksMethodName]
-    if type(remainMethod) ~= "function" then
-        return nil
-    end
 
-    local bestAura = nil
-    for _, candidateSpellID in ipairs(getAuraCandidateSpellIDs(spellID)) do
-        local okRemain, remain, duration = pcall(remainMethod, unit, candidateSpellID, sourceIsPlayer, true)
-        if okRemain then
-            remain = addon:UntaintNumber(remain, 0)
-            duration = addon:UntaintNumber(duration, 0)
+    local function lookupOnUnit(lookupUnitID)
+        local unit = addon:GetActionUnit(lookupUnitID)
+        if not unit then
+            return nil
+        end
+
+        local remainMethod = unit[remainMethodName]
+        local stacksMethod = unit[stacksMethodName]
+        if type(remainMethod) ~= "function" then
+            return nil
+        end
+
+        local bestAura = nil
+        for _, candidateSpellID in ipairs(getAuraCandidateSpellIDs(spellID)) do
+            local remain = 0
+            local duration = 0
+
+            local okByID, remainByID, durationByID = pcall(remainMethod, unit, candidateSpellID, sourceIsPlayer, true)
+            if okByID then
+                remain = math.max(remain, addon:UntaintNumber(remainByID, 0))
+                duration = math.max(duration, addon:UntaintNumber(durationByID, 0))
+            end
+
+            local okDefault, remainDefault, durationDefault = pcall(remainMethod, unit, candidateSpellID, sourceIsPlayer)
+            if okDefault then
+                remain = math.max(remain, addon:UntaintNumber(remainDefault, 0))
+                duration = math.max(duration, addon:UntaintNumber(durationDefault, 0))
+            end
+
             if remain > 0 or duration > 0 then
                 local count = 0
                 if type(stacksMethod) == "function" then
@@ -322,12 +364,14 @@ local function tryActionAuraLookup(unitID, spellID, filter, sourceUnit)
                 end
             end
         end
+
+        return bestAura
     end
 
-    return bestAura
+    return lookupOnUnit(unitID) or lookupOnUnit(getMatchingNameplateUnitID(unitID))
 end
 
-readAura = function(unitID, spellID, filter, sourceUnit)
+local function scanAuraList(unitID, spellID, filter, sourceUnit)
     if not unitID or not spellID or not unitExists(unitID) then
         return nil
     end
@@ -373,6 +417,23 @@ readAura = function(unitID, spellID, filter, sourceUnit)
                     source = sourceToken,
                 }
             end
+        end
+    end
+
+    return nil
+end
+
+readAura = function(unitID, spellID, filter, sourceUnit)
+    local aura = scanAuraList(unitID, spellID, filter, sourceUnit)
+    if aura then
+        return aura
+    end
+
+    local nameplateUnitID = getMatchingNameplateUnitID(unitID)
+    if nameplateUnitID then
+        aura = scanAuraList(nameplateUnitID, spellID, filter, sourceUnit)
+        if aura then
+            return aura
         end
     end
 

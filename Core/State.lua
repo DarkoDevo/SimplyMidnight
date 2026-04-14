@@ -220,7 +220,7 @@ local function tryActionPower(unitID, powerType, current, max, pct, currentKnown
 end
 
 local function readPower(unitID, powerType)
-    local prefersSecretFallback = powerType == nil
+    local prefersSecretFallback = powerType == nil or unitID == "player"
     if powerType == nil then
         powerType = addon:UntaintNumber(protectedCall(UnitPowerType, unitID), 0)
     end
