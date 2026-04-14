@@ -9,6 +9,11 @@ local slotCycle = {
     interrupt = "utility",
     utility = "primary",
 }
+local contentScopeCycle = {
+    all = "pve",
+    pve = "pvp",
+    pvp = "all",
+}
 
 local function cloneTable(value)
     if type(value) ~= "table" then
@@ -117,6 +122,14 @@ end
 
 function Registry:GetAll()
     return addon.db.registry.spells
+end
+
+function Registry:Get(index)
+    index = tonumber(index)
+    if not index then
+        return nil
+    end
+    return addon.db.registry.spells[index]
 end
 
 function Registry:GetCurrentPack()
@@ -267,6 +280,94 @@ function Registry:AddSpell(spellID, slot, priority)
     }))
 
     return true, spellName
+end
+
+function Registry:SetContentScope(index, contentScope)
+    local entry = self:Get(index)
+    if not entry then
+        return false
+    end
+
+    contentScope = tostring(contentScope or "all"):lower()
+    if contentScope ~= "all" and contentScope ~= "pve" and contentScope ~= "pvp" then
+        contentScope = "all"
+    end
+
+    entry.contentScope = contentScope
+    return true
+end
+
+function Registry:CycleContentScope(index)
+    local entry = self:Get(index)
+    if not entry then
+        return false
+    end
+
+    entry.contentScope = contentScopeCycle[entry.contentScope] or "all"
+    return true
+end
+
+function Registry:SetNote(index, note)
+    local entry = self:Get(index)
+    if not entry then
+        return false
+    end
+
+    note = tostring(note or ""):gsub("^%s+", ""):gsub("%s+$", "")
+    entry.note = note ~= "" and note or nil
+    return true
+end
+
+function Registry:SetCondition(index, key, value)
+    local entry = self:Get(index)
+    if not entry or type(key) ~= "string" or key == "" then
+        return false
+    end
+
+    entry.conditions = type(entry.conditions) == "table" and entry.conditions or {}
+    local normalized = addon.ConditionSchema and addon.ConditionSchema:NormalizeConditionValue(key, value) or value
+    if normalized == nil then
+        entry.conditions[key] = nil
+    else
+        entry.conditions[key] = normalized
+    end
+    return true
+end
+
+function Registry:GetCondition(index, key)
+    local entry = self:Get(index)
+    if not entry or type(entry.conditions) ~= "table" then
+        return nil
+    end
+    return entry.conditions[key]
+end
+
+function Registry:ClearConditions(index)
+    local entry = self:Get(index)
+    if not entry then
+        return false
+    end
+
+    entry.conditions = {}
+    return true
+end
+
+function Registry:ClearEditableConditions(index)
+    local entry = self:Get(index)
+    if not entry then
+        return false
+    end
+
+    entry.conditions = type(entry.conditions) == "table" and entry.conditions or {}
+
+    for _, key in ipairs(addon.ConditionSchema:GetBoolOrder() or {}) do
+        entry.conditions[key] = nil
+    end
+    for _, key in ipairs(addon.ConditionSchema:GetNumberOrder() or {}) do
+        entry.conditions[key] = nil
+    end
+    entry.conditions.rangeBucket = nil
+    return true
 end
 
 function Registry:RemoveSpell(index)
