@@ -40,6 +40,33 @@ local function unitCanAttack(leftUnitID, rightUnitID)
     return addon:NormalizeBoolean(protectedCall(UnitCanAttack, leftUnitID, rightUnitID), false)
 end
 
+local function spellIsInRange(spellID, unitID)
+    if not spellID or not unitID or not unitExists(unitID) then
+        return nil
+    end
+
+    local result
+    if type(C_Spell) == "table" and type(C_Spell.IsSpellInRange) == "function" then
+        result = protectedCall(C_Spell.IsSpellInRange, spellID, unitID)
+    elseif type(IsSpellInRange) == "function" then
+        result = protectedCall(IsSpellInRange, spellID, unitID)
+    end
+
+    if result == nil then
+        return nil
+    end
+
+    if result == true or result == 1 then
+        return true
+    end
+
+    if result == false or result == 0 then
+        return false
+    end
+
+    return nil
+end
+
 local function getVisibleEnemyCount()
     local count = 0
 
@@ -219,8 +246,21 @@ local function getRangeBucket()
         return "none"
     end
 
+    local currentPack = addon.Registry and addon.Registry:GetCurrentPack() or nil
+    local rangeHints = currentPack and currentPack.rangeHints or nil
+    local meleeSpellID = rangeHints and tonumber(rangeHints.meleeSpellID) or nil
+    local shortSpellID = rangeHints and tonumber(rangeHints.shortSpellID) or nil
+
+    if meleeSpellID and spellIsInRange(meleeSpellID, "target") == true then
+        return "melee"
+    end
+
     if addon:NormalizeBoolean(protectedCall(CheckInteractDistance, "target", 3), false) then
         return "melee"
+    end
+
+    if shortSpellID and spellIsInRange(shortSpellID, "target") == true then
+        return "short"
     end
 
     if addon:NormalizeBoolean(protectedCall(CheckInteractDistance, "target", 4), false) then

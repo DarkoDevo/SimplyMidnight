@@ -8,6 +8,10 @@ local packList = {
         class = "DEATHKNIGHT",
         specID = 252,
         name = "Unholy Death Knight",
+        rangeHints = {
+            meleeSpellID = 55090,
+            shortSpellID = 77575,
+        },
         entries = {
             {
                 spellID = 343294,
@@ -270,6 +274,9 @@ local packList = {
         class = "HUNTER",
         specID = 253,
         name = "Beast Mastery Hunter",
+        rangeHints = {
+            shortSpellID = 34026,
+        },
         entries = {
             {
                 spellID = 53351,
