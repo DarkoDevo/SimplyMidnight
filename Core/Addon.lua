@@ -3,16 +3,7 @@ local addonName, addon = ...
 local unpackCompat = table.unpack or unpack
 local bootstrapFrame
 local runtimeEventListeners = {}
-local preregisteredRuntimeEvents = {
-    PLAYER_ENTERING_WORLD = true,
-    DISPLAY_SIZE_CHANGED = true,
-    UNIT_SPELLCAST_SUCCEEDED = true,
-    COMBAT_LOG_EVENT_UNFILTERED = true,
-    PLAYER_SPECIALIZATION_CHANGED = true,
-    ADDON_ACTION_BLOCKED = true,
-    ADDON_ACTION_FORBIDDEN = true,
-    MACRO_ACTION_BLOCKED = true,
-}
+local dispatchRuntimeEvent
 
 local function deepCopy(value)
     if type(value) ~= "table" then
@@ -529,19 +520,11 @@ function addon:RegisterRuntimeEvent(eventName, owner, methodName)
         methodName = methodName,
     }
 
-    if bootstrapFrame and not preregisteredRuntimeEvents[eventName] then
-        local ok = pcall(bootstrapFrame.RegisterEvent, bootstrapFrame, eventName)
-        if ok then
-            preregisteredRuntimeEvents[eventName] = true
-        elseif self.TaintGuard and self.TaintGuard.Record then
-            self.TaintGuard:Record("EVENT_REGISTER_FAILED", {
-                source = self.name,
-                message = eventName,
-            })
-        end
-    end
-
     return true
+end
+
+function addon:FireRuntimeEvent(eventName, ...)
+    dispatchRuntimeEvent(eventName, ...)
 end
 
 function addon:InitializeModules()
@@ -577,9 +560,10 @@ function addon:InitializeModules()
         self.ExportHUD:Start()
     end
     self:NotifyCompatibilityChanged()
+    self:FireRuntimeEvent("PLAYER_ENTERING_WORLD")
 end
 
-local function dispatchRuntimeEvent(event, ...)
+dispatchRuntimeEvent = function(event, ...)
     local listeners = runtimeEventListeners[event]
     if type(listeners) ~= "table" then
         return
@@ -597,9 +581,6 @@ end
 bootstrapFrame = CreateFrame("Frame")
 bootstrapFrame:RegisterEvent("ADDON_LOADED")
 bootstrapFrame:RegisterEvent("PLAYER_LOGIN")
-for eventName in pairs(preregisteredRuntimeEvents) do
-    bootstrapFrame:RegisterEvent(eventName)
-end
 bootstrapFrame:SetScript("OnEvent", function(_, event, ...)
     local arg1 = ...
     if event == "ADDON_LOADED" and arg1 == addonName then

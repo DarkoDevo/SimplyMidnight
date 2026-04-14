@@ -503,14 +503,26 @@ local function matchesConditions(entry, state)
     end
     if not matchesAuraList(conditions.auraRemainingBelow, function(auraCondition)
         local aura = readAura(auraCondition.unit, auraCondition.spellID, auraCondition.filter, auraCondition.sourceUnit)
-        return aura ~= nil and aura.remaining <= (auraCondition.seconds or 0)
+        if aura == nil then
+            return false
+        end
+        if aura.provisional then
+            return false
+        end
+        return aura.remaining <= (auraCondition.seconds or 0)
     end) then
         local auraCondition = asConditionList(conditions.auraRemainingBelow)[1]
         return fail("aura remains > " .. tostring(auraCondition and auraCondition.seconds or "?"))
     end
     if not matchesAuraList(conditions.auraRemainingAbove, function(auraCondition)
         local aura = readAura(auraCondition.unit, auraCondition.spellID, auraCondition.filter, auraCondition.sourceUnit)
-        return aura ~= nil and aura.remaining >= (auraCondition.seconds or 0)
+        if aura == nil then
+            return false
+        end
+        if aura.provisional then
+            return true
+        end
+        return aura.remaining >= (auraCondition.seconds or 0)
     end) then
         local auraCondition = asConditionList(conditions.auraRemainingAbove)[1]
         return fail("aura remains < " .. tostring(auraCondition and auraCondition.seconds or "?"))
