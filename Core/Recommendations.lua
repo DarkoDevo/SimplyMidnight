@@ -5,6 +5,7 @@ local Recommendations = {
         slots = {},
     },
 }
+local readAura
 local OUTBREAK_SPELL_ID = 77575
 local OUTBREAK_DISEASE_ALIASES = {
     [191587] = true,
@@ -195,6 +196,51 @@ local function findCandidateBySpellID(candidates, spellID)
     return nil
 end
 
+local function buildPrimaryDecisionFingerprint(state)
+    local targetGuid = addon:NormalizeString(protectedCall(UnitGUID, "target")) or "-"
+    local disease = readAura("target", 191587, "HARMFUL", "player")
+    local diseaseState = "missing"
+    if disease then
+        if disease.provisional then
+            diseaseState = "provisional"
+        elseif (disease.remaining or 0) <= 4 then
+            diseaseState = "refresh"
+        else
+            diseaseState = "up"
+        end
+    end
+
+    local wounds = readAura("target", 194310, "HARMFUL", "player")
+    local woundCount = tonumber(wounds and wounds.count) or 0
+    local suddenDoom = readAura("player", 81340, "HELPFUL") ~= nil and 1 or 0
+    local runicBucket = 0
+    local runicPower = tonumber(state.player.primaryCurrent) or 0
+    if runicPower >= 80 then
+        runicBucket = 3
+    elseif runicPower >= 60 then
+        runicBucket = 2
+    elseif runicPower >= 40 then
+        runicBucket = 1
+    end
+
+    local execute = state.target.healthKnown and state.target.healthPct <= 35 and 1 or 0
+    local aoe = (tonumber(state.environment.enemyCount) or 0) >= 3 and 1 or 0
+
+    return table.concat({
+        targetGuid,
+        tostring(state.target.rangeBucket or "none"),
+        tostring(tonumber(state.player.secondaryCurrent) or 0),
+        tostring(runicBucket),
+        tostring(woundCount),
+        tostring(diseaseState),
+        tostring(suddenDoom),
+        tostring(execute),
+        tostring(aoe),
+        tostring(state.player.moving and 1 or 0),
+        tostring(state.target.casting and 1 or 0),
+    }, "|")
+end
+
 local function getAuraObject(unitID, index, filter)
     if type(C_UnitAuras) == "table" and type(C_UnitAuras.GetAuraDataByIndex) == "function" then
         local auraData = protectedCall(C_UnitAuras.GetAuraDataByIndex, unitID, index, filter)
@@ -281,7 +327,7 @@ local function tryActionAuraLookup(unitID, spellID, filter, sourceUnit)
     return bestAura
 end
 
-local function readAura(unitID, spellID, filter, sourceUnit)
+readAura = function(unitID, spellID, filter, sourceUnit)
     if not unitID or not spellID or not unitExists(unitID) then
         return nil
     end
@@ -603,9 +649,13 @@ function Recommendations:Initialize()
     self.primaryCommit = nil
 end
 
-function Recommendations:ResolveCommittedPrimary(candidates)
+function Recommendations:ResolveCommittedPrimary(candidates, state)
     local topCandidate = candidates and candidates[1] or nil
+    local fingerprint = state and buildPrimaryDecisionFingerprint(state) or nil
     if not topCandidate then
+        if self.primaryCommit and self.primaryCommit.fingerprint and self.primaryCommit.fingerprint == fingerprint then
+            return self.primaryCommit.entry
+        end
         self.primaryCommit = nil
         return nil
     end
@@ -614,8 +664,15 @@ function Recommendations:ResolveCommittedPrimary(candidates)
         self.primaryCommit = {
             spellID = topCandidate.spellID,
             entry = topCandidate,
+            fingerprint = fingerprint,
         }
         return topCandidate
+    end
+
+    if self.primaryCommit.fingerprint and self.primaryCommit.fingerprint == fingerprint and self.primaryCommit.entry then
+        if not topCandidate.overridePrimary then
+            return self.primaryCommit.entry
+        end
     end
 
     local committedCandidate = findCandidateBySpellID(candidates, self.primaryCommit.spellID)
@@ -623,12 +680,14 @@ function Recommendations:ResolveCommittedPrimary(candidates)
         self.primaryCommit = {
             spellID = topCandidate.spellID,
             entry = topCandidate,
+            fingerprint = fingerprint,
         }
         return topCandidate
     end
 
     if tonumber(committedCandidate.spellID) == tonumber(topCandidate.spellID) then
         self.primaryCommit.entry = topCandidate
+        self.primaryCommit.fingerprint = fingerprint
         return topCandidate
     end
 
@@ -639,11 +698,13 @@ function Recommendations:ResolveCommittedPrimary(candidates)
         self.primaryCommit = {
             spellID = topCandidate.spellID,
             entry = topCandidate,
+            fingerprint = fingerprint,
         }
         return topCandidate
     end
 
     self.primaryCommit.entry = committedCandidate
+    self.primaryCommit.fingerprint = fingerprint
     return committedCandidate
 end
 
@@ -760,7 +821,7 @@ function Recommendations:Refresh(state, options)
         end
 
         if slot == "primary" then
-            selected = self:ResolveCommittedPrimary(matchedEntries)
+            selected = self:ResolveCommittedPrimary(matchedEntries, state)
             if slotDiagnostics and selected then
                 slotDiagnostics.selected = {
                     spellID = selected.spellID,
