@@ -5,6 +5,7 @@ local Packs = {}
 local packList = {
     {
         key = "deathknight-unholy",
+        version = 3,
         class = "DEATHKNIGHT",
         specID = 252,
         name = "Unholy Death Knight",
@@ -46,7 +47,7 @@ local packList = {
             {
                 spellID = 77575,
                 slot = "primary",
-                priority = 144,
+                priority = 143,
                 conditions = {
                     inCombat = true,
                     requireTarget = true,
@@ -60,6 +61,22 @@ local packList = {
                     },
                 },
                 note = "Refresh Virulent Plague",
+            },
+            {
+                spellID = 43265,
+                slot = "primary",
+                priority = 140,
+                conditions = {
+                    inCombat = true,
+                    requireTarget = true,
+                    targetHostile = true,
+                    targetAlive = true,
+                    rangeBucket = "melee",
+                    enemyCountAtLeast = 3,
+                    cooldownReady = true,
+                    modeConserve = false,
+                },
+                note = "AoE setup",
             },
             {
                 spellID = 85948,
@@ -83,7 +100,7 @@ local packList = {
             {
                 spellID = 85948,
                 slot = "primary",
-                priority = 135,
+                priority = 134,
                 conditions = {
                     inCombat = true,
                     requireTarget = true,
@@ -101,19 +118,60 @@ local packList = {
                 note = "Rebuild Festering Wounds",
             },
             {
-                spellID = 43265,
+                spellID = 55090,
                 slot = "primary",
-                priority = 130,
+                priority = 132,
                 conditions = {
                     inCombat = true,
                     requireTarget = true,
                     targetHostile = true,
                     targetAlive = true,
                     rangeBucket = "melee",
-                    enemyCountAtLeast = 3,
+                    auraStacksAtLeast = {
+                        unit = "target",
+                        spellID = 194310,
+                        filter = "HARMFUL",
+                        stacks = 1,
+                    },
                     secondaryAtLeast = 1,
                 },
-                note = "AoE ground pressure",
+                note = "Spend Festering Wounds",
+            },
+            {
+                spellID = 207317,
+                slot = "primary",
+                priority = 128,
+                conditions = {
+                    inCombat = true,
+                    requireTarget = true,
+                    targetHostile = true,
+                    targetAlive = true,
+                    enemyCountAtLeast = 3,
+                    resourceAtLeast = 60,
+                    auraPresent = {
+                        unit = "target",
+                        spellID = 191587,
+                        filter = "HARMFUL",
+                    },
+                },
+                note = "AoE runic spender",
+            },
+            {
+                spellID = 47541,
+                slot = "primary",
+                priority = 126,
+                conditions = {
+                    inCombat = true,
+                    requireTarget = true,
+                    targetHostile = true,
+                    targetAlive = true,
+                    auraPresent = {
+                        unit = "player",
+                        spellID = 81340,
+                        filter = "HELPFUL",
+                    },
+                },
+                note = "Sudden Doom proc",
             },
             {
                 spellID = 47541,
@@ -156,6 +214,21 @@ local packList = {
                 note = "Runic filler",
             },
             {
+                spellID = 42650,
+                slot = "secondary",
+                priority = 150,
+                conditions = {
+                    inCombat = true,
+                    requireTarget = true,
+                    targetHostile = true,
+                    targetAlive = true,
+                    modeBurst = true,
+                    cooldownReady = true,
+                    modeConserve = false,
+                },
+                note = "Major burst",
+            },
+            {
                 spellID = 1233448,
                 slot = "secondary",
                 priority = 145,
@@ -169,6 +242,22 @@ local packList = {
                     modeConserve = false,
                 },
                 note = "Dark Transformation burst window",
+            },
+            {
+                spellID = 43265,
+                slot = "secondary",
+                priority = 142,
+                conditions = {
+                    inCombat = true,
+                    requireTarget = true,
+                    targetHostile = true,
+                    targetAlive = true,
+                    rangeBucket = "melee",
+                    enemyCountAtLeast = 3,
+                    cooldownReady = true,
+                    modeConserve = false,
+                },
+                note = "AoE support",
             },
             {
                 spellID = 46584,
@@ -185,7 +274,7 @@ local packList = {
                 note = "Raise ghoul",
             },
             {
-                spellID = 43265,
+                spellID = 207317,
                 slot = "secondary",
                 priority = 130,
                 conditions = {
@@ -193,11 +282,10 @@ local packList = {
                     requireTarget = true,
                     targetHostile = true,
                     targetAlive = true,
-                    rangeBucket = "melee",
                     enemyCountAtLeast = 3,
-                    cooldownReady = true,
+                    resourceAtLeast = 40,
                 },
-                note = "AoE support",
+                note = "AoE pressure",
             },
             {
                 spellID = 47541,
@@ -271,6 +359,7 @@ local packList = {
     },
     {
         key = "hunter-beastmastery",
+        version = 1,
         class = "HUNTER",
         specID = 253,
         name = "Beast Mastery Hunter",

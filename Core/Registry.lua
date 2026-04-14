@@ -51,6 +51,7 @@ function Registry:NormalizeEntry(entry)
         advancedRule = entry.advancedRule,
         specID = tonumber(entry.specID),
         packKey = entry.packKey,
+        packVersion = tonumber(entry.packVersion),
         source = entry.source,
         note = entry.note,
     }
@@ -139,6 +140,32 @@ function Registry:CountEntriesForSpec(specID)
     return count
 end
 
+function Registry:CountBuiltinEntriesForPack(packKey)
+    local count = 0
+
+    for _, entry in ipairs(addon.db.registry.spells) do
+        if entry.source == "builtin" and entry.packKey == packKey then
+            count = count + 1
+        end
+    end
+
+    return count
+end
+
+function Registry:RemoveBuiltinEntriesForPack(packKey)
+    local removed = 0
+
+    for index = #addon.db.registry.spells, 1, -1 do
+        local entry = addon.db.registry.spells[index]
+        if entry.source == "builtin" and entry.packKey == packKey then
+            table.remove(addon.db.registry.spells, index)
+            removed = removed + 1
+        end
+    end
+
+    return removed
+end
+
 function Registry:InstallPack(pack, options)
     options = options or {}
     if type(pack) == "string" then
@@ -158,12 +185,13 @@ function Registry:InstallPack(pack, options)
         local normalized = self:NormalizeEntry(entry)
         normalized.specID = pack.specID
         normalized.packKey = pack.key
+        normalized.packVersion = tonumber(pack.version) or 1
         normalized.source = "builtin"
         table.insert(addon.db.registry.spells, normalized)
         added = added + 1
     end
 
-    addon.db.registry.installedPacks[pack.key] = addon.db.registry.version
+    addon.db.registry.installedPacks[pack.key] = tonumber(pack.version) or 1
     return true, string.format("Installed %s (%d entries)", pack.name, added)
 end
 
@@ -173,8 +201,18 @@ function Registry:EnsureCurrentPack(force)
         return false, "no built-in pack for this spec"
     end
 
+    local packVersion = tonumber(pack.version) or 1
+    local installedVersion = tonumber(addon.db.registry.installedPacks[pack.key]) or 0
+    local builtinCount = self:CountBuiltinEntriesForPack(pack.key)
+
+    if force or (installedVersion > 0 and (installedVersion < packVersion or builtinCount == 0)) then
+        self:RemoveBuiltinEntriesForPack(pack.key)
+        addon.db.registry.installedPacks[pack.key] = nil
+        return self:InstallPack(pack, { force = true })
+    end
+
     if not force then
-        if addon.db.registry.installedPacks[pack.key] then
+        if installedVersion > 0 then
             return false, pack.name .. " is already installed"
         end
         if self:CountEntriesForSpec(pack.specID) > 0 then
