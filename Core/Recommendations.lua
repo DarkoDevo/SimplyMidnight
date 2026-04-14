@@ -932,6 +932,10 @@ function Recommendations:Refresh(state, options)
 
         if slot == "primary" then
             selected = self:ResolveCommittedPrimary(matchedEntries, state)
+            if selected and not findCandidateBySpellID(matchedEntries, selected.spellID) then
+                self.primaryCommit = nil
+                selected = nil
+            end
             if slotDiagnostics and selected then
                 slotDiagnostics.selected = {
                     spellID = selected.spellID,

@@ -259,6 +259,8 @@ function ExportHUD:GetDiagnosticLines(state, recommendations)
         local slotMessage = "-"
         if slotDiagnostics and slotDiagnostics.selected and slotDiagnostics.selected.note then
             slotMessage = shortText(slotDiagnostics.selected.note, 18)
+        elseif slotDiagnostics and slotDiagnostics.selected and slotDiagnostics.selected.name then
+            slotMessage = "selected"
         elseif slotDiagnostics and slotDiagnostics.rejected and slotDiagnostics.rejected[1] then
             slotMessage = shortText(slotDiagnostics.rejected[1].reason, 18)
         elseif slotDiagnostics and slotDiagnostics.empty then

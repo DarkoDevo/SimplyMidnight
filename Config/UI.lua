@@ -206,10 +206,6 @@ function ConfigUI:CreateBoolControl(conditionKey, index)
     local definition = addon.ConditionSchema:GetDefinition(conditionKey)
     local control = CreateFrame("Button", nil, self.editorPanel, "UIPanelButtonTemplate")
     control:SetSize(72, 20)
-
-    local column = (index - 1) % 2
-    local row = math.floor((index - 1) / 2)
-    control:SetPoint("TOPLEFT", self.editorPanel, "TOPLEFT", 164 + (column * 158), -196 - (row * 26))
     control.conditionKey = conditionKey
     control.stateIndex = 1
     control:SetScript("OnClick", function(button)
@@ -241,10 +237,6 @@ end
 function ConfigUI:CreateNumberControl(conditionKey, index)
     local definition = addon.ConditionSchema:GetDefinition(conditionKey)
     local label = self.editorPanel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-
-    local column = (index - 1) % 2
-    local row = math.floor((index - 1) / 2)
-    label:SetPoint("TOPLEFT", self.editorPanel, "TOPLEFT", 22 + (column * 230), -382 - (row * 30))
     label:SetWidth(132)
     label:SetJustifyH("LEFT")
     label:SetText(definition and definition.label or conditionKey)
@@ -276,13 +268,69 @@ function ConfigUI:CreateNumberControl(conditionKey, index)
     self.numberControls[#self.numberControls + 1] = box
 end
 
+function ConfigUI:LayoutEditor()
+    if not self.editorPanel then
+        return
+    end
+
+    local panel = self.editorPanel
+    local function setTopLeft(widget, x, y)
+        widget:ClearAllPoints()
+        widget:SetPoint("TOPLEFT", panel, "TOPLEFT", x, -y)
+    end
+
+    setTopLeft(self.noteLabel, 16, 84)
+    setTopLeft(self.noteBox, 16, 108)
+
+    setTopLeft(self.summaryLabel, 16, 144)
+    setTopLeft(self.summaryText, 16, 164)
+    self.summaryText:SetWidth(454)
+    self.summaryText:SetJustifyH("LEFT")
+    self.summaryText:SetJustifyV("TOP")
+    self.summaryText:SetWordWrap(true)
+
+    local summaryHeight = math.max(math.ceil(self.summaryText:GetStringHeight() or 0), 34)
+    local cursorY = 164 + summaryHeight + 16
+
+    setTopLeft(self.boolHeader, 16, cursorY)
+    local boolTop = cursorY + 28
+    for index, control in ipairs(self.boolControls) do
+        local column = (index - 1) % 2
+        local row = math.floor((index - 1) / 2)
+        control:ClearAllPoints()
+        control:SetPoint("TOPLEFT", panel, "TOPLEFT", 140 + (column * 234), -(boolTop + (row * 24)))
+    end
+
+    local boolRows = math.max(math.ceil(#self.boolControls / 2), 1)
+    cursorY = boolTop + ((boolRows - 1) * 24) + 30
+
+    setTopLeft(self.rangeLabel, 22, cursorY)
+    self.rangeButton:ClearAllPoints()
+    self.rangeButton:SetPoint("LEFT", self.rangeLabel, "RIGHT", 12, 0)
+
+    cursorY = cursorY + 28
+    setTopLeft(self.numberHeader, 16, cursorY)
+    local numberTop = cursorY + 24
+    for index, box in ipairs(self.numberControls) do
+        local column = (index - 1) % 2
+        local row = math.floor((index - 1) / 2)
+        if box.label then
+            box.label:ClearAllPoints()
+            box.label:SetPoint("TOPLEFT", panel, "TOPLEFT", 22 + (column * 230), -(numberTop + (row * 24)))
+        end
+    end
+
+    self.advancedHeader:Hide()
+    self.advancedText:Hide()
+end
+
 function ConfigUI:Initialize()
     if self.frame then
         return
     end
 
     self.frame = createBackdropFrame("SimplyMidnightConfigFrame", UIParent)
-    self.frame:SetSize(1040, 560)
+    self.frame:SetSize(1040, 690)
     self.frame:SetPoint("CENTER")
     self.frame:SetMovable(true)
     self.frame:EnableMouse(true)
@@ -370,7 +418,7 @@ function ConfigUI:Initialize()
     end)
 
     self.listPanel = createBackdropFrame(nil, self.frame)
-    self.listPanel:SetSize(504, 454)
+    self.listPanel:SetSize(504, 580)
     self.listPanel:SetPoint("TOPLEFT", self.frame, "TOPLEFT", 16, -92)
 
     self.listHeader = self.listPanel:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
@@ -382,7 +430,7 @@ function ConfigUI:Initialize()
     end
 
     self.editorPanel = createBackdropFrame(nil, self.frame)
-    self.editorPanel:SetSize(488, 454)
+    self.editorPanel:SetSize(488, 580)
     self.editorPanel:SetPoint("TOPLEFT", self.listPanel, "TOPRIGHT", 12, 0)
 
     self.editorTitle = self.editorPanel:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
@@ -455,6 +503,7 @@ function ConfigUI:Initialize()
     self.summaryText:SetWidth(454)
     self.summaryText:SetJustifyH("LEFT")
     self.summaryText:SetJustifyV("TOP")
+    self.summaryText:SetWordWrap(true)
 
     self.boolHeader = self.editorPanel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     self.boolHeader:SetPoint("TOPLEFT", self.editorPanel, "TOPLEFT", 16, -170)
@@ -589,6 +638,7 @@ function ConfigUI:RefreshEditor()
         summaryLines[#summaryLines + 1] = "Complex preserved: unavailable"
     end
     self.summaryText:SetText(table.concat(summaryLines, "\n"))
+    self:LayoutEditor()
 
     self.scopeButton:SetText(hasEntry and formatContentScope(entry.contentScope) or "Scope")
     setWidgetEnabled(self.scopeButton, hasEntry)
