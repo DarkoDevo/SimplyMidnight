@@ -9,7 +9,7 @@ local packList = {
         specID = 252,
         name = "Unholy Death Knight",
         rangeHints = {
-            meleeSpellID = 55090,
+            meleeSpellID = 85948,
             shortSpellID = 77575,
         },
         entries = {
