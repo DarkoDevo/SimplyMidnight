@@ -5,6 +5,8 @@ local ConfigUI = {
     rows = {},
     addSlotIndex = 1,
     selectedIndex = 1,
+    scrollOffset = 0,
+    visibleRows = 12,
     boolControls = {},
     numberControls = {},
 }
@@ -116,7 +118,7 @@ end
 
 function ConfigUI:CreateListRow(rowIndex)
     local row = createBackdropFrame(nil, self.listPanel)
-    row:SetSize(484, 28)
+    row:SetSize(474, 28)
     row:SetPoint("TOPLEFT", self.listPanel, "TOPLEFT", 10, -52 - ((rowIndex - 1) * 30))
 
     row.icon = row:CreateTexture(nil, "ARTWORK")
@@ -287,10 +289,10 @@ function ConfigUI:LayoutEditor()
     self.summaryText:SetWidth(454)
     self.summaryText:SetJustifyH("LEFT")
     self.summaryText:SetJustifyV("TOP")
-    self.summaryText:SetWordWrap(true)
+    self.summaryText:SetWordWrap(false)
+    self.summaryText:SetHeight(40)
 
-    local summaryHeight = math.max(math.ceil(self.summaryText:GetStringHeight() or 0), 34)
-    local cursorY = 164 + summaryHeight + 16
+    local cursorY = 214
 
     setTopLeft(self.boolHeader, 16, cursorY)
     local boolTop = cursorY + 28
@@ -312,16 +314,41 @@ function ConfigUI:LayoutEditor()
     setTopLeft(self.numberHeader, 16, cursorY)
     local numberTop = cursorY + 24
     for index, box in ipairs(self.numberControls) do
-        local column = (index - 1) % 2
-        local row = math.floor((index - 1) / 2)
+        local column = (index - 1) % 3
+        local row = math.floor((index - 1) / 3)
+        local baseX = 22 + (column * 150)
         if box.label then
             box.label:ClearAllPoints()
-            box.label:SetPoint("TOPLEFT", panel, "TOPLEFT", 22 + (column * 230), -(numberTop + (row * 24)))
+            box.label:SetPoint("TOPLEFT", panel, "TOPLEFT", baseX, -(numberTop + (row * 26)))
+            box.label:SetWidth(92)
         end
+        box:ClearAllPoints()
+        box:SetPoint("LEFT", box.label, "RIGHT", 8, 0)
     end
 
     self.advancedHeader:Hide()
     self.advancedText:Hide()
+end
+
+function ConfigUI:SetScrollOffset(offset)
+    local total = #(addon.Registry:GetAll() or {})
+    local maxOffset = math.max(total - self.visibleRows, 0)
+    self.scrollOffset = math.max(0, math.min(tonumber(offset) or 0, maxOffset))
+    if self.listScrollFrame and type(FauxScrollFrame_SetOffset) == "function" then
+        FauxScrollFrame_SetOffset(self.listScrollFrame, self.scrollOffset)
+    end
+end
+
+function ConfigUI:EnsureSelectionVisible()
+    if not self.selectedIndex then
+        return
+    end
+
+    if self.selectedIndex <= self.scrollOffset then
+        self:SetScrollOffset(self.selectedIndex - 1)
+    elseif self.selectedIndex > (self.scrollOffset + self.visibleRows) then
+        self:SetScrollOffset(self.selectedIndex - self.visibleRows)
+    end
 end
 
 function ConfigUI:Initialize()
@@ -420,12 +447,28 @@ function ConfigUI:Initialize()
     self.listPanel = createBackdropFrame(nil, self.frame)
     self.listPanel:SetSize(504, 580)
     self.listPanel:SetPoint("TOPLEFT", self.frame, "TOPLEFT", 16, -92)
+    self.listPanel:EnableMouseWheel(true)
+    self.listPanel:SetScript("OnMouseWheel", function(_, delta)
+        self:SetScrollOffset(self.scrollOffset - delta)
+        self:RefreshList()
+    end)
 
     self.listHeader = self.listPanel:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     self.listHeader:SetPoint("TOPLEFT", self.listPanel, "TOPLEFT", 10, -12)
     self.listHeader:SetText("Icon / Name / Slot / Priority / Logic / Enabled / Remove")
 
-    for rowIndex = 1, 12 do
+    self.listScrollFrame = CreateFrame("ScrollFrame", nil, self.listPanel, "FauxScrollFrameTemplate")
+    self.listScrollFrame:SetPoint("TOPRIGHT", self.listPanel, "TOPRIGHT", -6, -46)
+    self.listScrollFrame:SetPoint("BOTTOMRIGHT", self.listPanel, "BOTTOMRIGHT", -6, 10)
+    self.listScrollFrame:SetWidth(20)
+    self.listScrollFrame:SetScript("OnVerticalScroll", function(scrollFrame, offset)
+        FauxScrollFrame_OnVerticalScroll(scrollFrame, offset, 30, function()
+            self.scrollOffset = FauxScrollFrame_GetOffset(scrollFrame) or 0
+            self:RefreshList()
+        end)
+    end)
+
+    for rowIndex = 1, self.visibleRows do
         self:CreateListRow(rowIndex)
     end
 
@@ -561,6 +604,8 @@ function ConfigUI:Initialize()
     self.advancedText:SetWidth(454)
     self.advancedText:SetJustifyH("LEFT")
     self.advancedText:SetText("Custom rule text, aura builders, and full logic editing are still reserved. This panel now handles shared gates and keeps unsupported pack logic intact.")
+    self.advancedHeader:Hide()
+    self.advancedText:Hide()
 
     self.footer = self.frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     self.footer:SetPoint("BOTTOMLEFT", self.frame, "BOTTOMLEFT", 16, 18)
@@ -571,10 +616,14 @@ end
 
 function ConfigUI:RefreshList()
     local spells = addon.Registry:GetAll()
+    local totalEntries = #spells
+
+    self:EnsureSelectionVisible()
 
     for rowOffset = 1, #self.rows do
         local row = self.rows[rowOffset]
-        local entry = spells[rowOffset]
+        local actualIndex = rowOffset + self.scrollOffset
+        local entry = spells[actualIndex]
         if entry then
             row:Show()
             row.icon:SetTexture(addon:GetSpellTexture(entry.spellID) or addon.constants.questionMarkIcon)
@@ -582,27 +631,34 @@ function ConfigUI:RefreshList()
             row.slotButton:SetText(entry.slot)
             row.priorityText:SetText(tostring(entry.priority))
             row.enabled:SetChecked(entry.enabled)
-            row.logic:SetText(self.selectedIndex == rowOffset and "Editing" or "Logic")
+            row.logic:SetText(self.selectedIndex == actualIndex and "Editing" or "Logic")
 
-            if self.selectedIndex == rowOffset then
+            if self.selectedIndex == actualIndex then
                 row:SetBackdropBorderColor(1.0, 0.82, 0.25, 0.95)
             else
                 row:SetBackdropBorderColor(0.25, 0.55, 1.0, 0.9)
             end
 
-            row.slotButton.rowIndex = rowOffset
-            row.priorityMinus.rowIndex = rowOffset
-            row.priorityPlus.rowIndex = rowOffset
-            row.logic.rowIndex = rowOffset
-            row.enabled.rowIndex = rowOffset
-            row.remove.rowIndex = rowOffset
+            row.slotButton.rowIndex = actualIndex
+            row.priorityMinus.rowIndex = actualIndex
+            row.priorityPlus.rowIndex = actualIndex
+            row.logic.rowIndex = actualIndex
+            row.enabled.rowIndex = actualIndex
+            row.remove.rowIndex = actualIndex
         else
             row:Hide()
         end
     end
 
-    if #spells > #self.rows then
-        self.footer:SetText("Pack: " .. addon.Registry:GetCurrentPackLabel() .. " | showing first " .. #self.rows .. " spells. Select a row and use the logic editor on the right.")
+    if self.listScrollFrame and type(FauxScrollFrame_Update) == "function" then
+        FauxScrollFrame_Update(self.listScrollFrame, totalEntries, self.visibleRows, 30)
+        self.scrollOffset = FauxScrollFrame_GetOffset(self.listScrollFrame) or self.scrollOffset
+    end
+
+    if totalEntries > #self.rows then
+        local firstVisible = math.min(self.scrollOffset + 1, totalEntries)
+        local lastVisible = math.min(self.scrollOffset + #self.rows, totalEntries)
+        self.footer:SetText("Pack: " .. addon.Registry:GetCurrentPackLabel() .. string.format(" | showing %d-%d of %d spells. Use the mouse wheel or scroll bar to browse.", firstVisible, lastVisible, totalEntries))
     else
         self.footer:SetText("Pack: " .. addon.Registry:GetCurrentPackLabel() .. " | select a spell to edit shared conditions on the right.")
     end
@@ -621,15 +677,15 @@ function ConfigUI:RefreshEditor()
     local summaryLines = {}
     if hasEntry then
         if entry.note and entry.note ~= "" then
-            summaryLines[#summaryLines + 1] = "Note: " .. entry.note
+            summaryLines[#summaryLines + 1] = shortText("Note: " .. entry.note, 88)
         end
         if summary and #summary.simple > 0 then
-            summaryLines[#summaryLines + 1] = "Simple: " .. table.concat(summary.simple, " | ")
+            summaryLines[#summaryLines + 1] = shortText("Simple: " .. table.concat(summary.simple, " | "), 88)
         else
             summaryLines[#summaryLines + 1] = "Simple: no shared conditions yet"
         end
         if summary and #summary.complex > 0 then
-            summaryLines[#summaryLines + 1] = "Complex preserved: " .. table.concat(summary.complex, ", ")
+            summaryLines[#summaryLines + 1] = shortText("Complex: " .. table.concat(summary.complex, ", "), 88)
         else
             summaryLines[#summaryLines + 1] = "Complex preserved: none"
         end

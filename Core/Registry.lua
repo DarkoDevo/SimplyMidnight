@@ -45,6 +45,38 @@ local function getCurrentSpecID()
     return GetSpecializationInfo(specIndex)
 end
 
+local function isEmptyTable(value)
+    if type(value) ~= "table" then
+        return true
+    end
+
+    return next(value) == nil
+end
+
+local function buildDefaultManualConditions(slot)
+    slot = normalizeSlot(slot)
+    if slot == "utility" then
+        return {}
+    end
+
+    local conditions = {
+        inCombat = true,
+    }
+
+    if slot == "primary" or slot == "secondary" or slot == "interrupt" then
+        conditions.requireTarget = true
+        conditions.targetHostile = true
+        conditions.targetAlive = true
+    end
+
+    if slot == "interrupt" then
+        conditions.targetCasting = true
+        conditions.targetInterruptible = true
+    end
+
+    return conditions
+end
+
 function Registry:NormalizeEntry(entry)
     return {
         spellID = tonumber(entry.spellID),
@@ -96,6 +128,9 @@ function Registry:Initialize()
         end
         if addon.db.registry.spells[index].source == nil then
             addon.db.registry.spells[index].source = "legacy"
+        end
+        if previousVersion < 3 and addon.db.registry.spells[index].source == "manual" and isEmptyTable(addon.db.registry.spells[index].conditions) then
+            addon.db.registry.spells[index].conditions = buildDefaultManualConditions(addon.db.registry.spells[index].slot)
         end
     end
 
@@ -274,7 +309,7 @@ function Registry:AddSpell(spellID, slot, priority)
         priority = priority,
         enabled = true,
         contentScope = "all",
-        conditions = {},
+        conditions = buildDefaultManualConditions(slot),
         specID = getCurrentSpecID(),
         source = "manual",
     }))
