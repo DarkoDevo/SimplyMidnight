@@ -40,6 +40,10 @@ end
 function addon:GetCompatLayer()
     local action = rawget(_G, "Action")
     if type(action) ~= "table" then
+        local secretEngine = rawget(_G, "ActionSecretEngine")
+        if type(secretEngine) == "table" then
+            return secretEngine
+        end
         return nil
     end
 
@@ -49,6 +53,20 @@ function addon:GetCompatLayer()
 
     if type(action.SecretEngine) == "table" and type(action.SecretEngine.Compat) == "table" then
         return action.SecretEngine.Compat
+    end
+
+    return nil
+end
+
+function addon:GetSecretEngine()
+    local compat = self:GetCompatLayer()
+    if compat and type(compat) == "table" then
+        return compat
+    end
+
+    local secretEngine = rawget(_G, "ActionSecretEngine")
+    if type(secretEngine) == "table" then
+        return secretEngine
     end
 
     return nil
@@ -219,7 +237,7 @@ function addon:GetActionUnit(unitID)
     return nil
 end
 
-function addon:TryActionUnitNumber(unitID, methodName, fallback)
+function addon:TryActionUnitNumber(unitID, methodName, fallback, ...)
     local unit = self:GetActionUnit(unitID)
     if not unit then
         return fallback or 0, false
@@ -230,9 +248,31 @@ function addon:TryActionUnitNumber(unitID, methodName, fallback)
         return fallback or 0, false
     end
 
-    local ok, raw = pcall(method, unit)
+    local ok, raw = pcall(method, unit, ...)
     if not ok then
         return fallback or 0, false
+    end
+
+    return self:TryUntaintNumber(raw, fallback)
+end
+
+function addon:TrySecretEngineNumber(methodName, fallback, ...)
+    local secretEngine = self:GetSecretEngine()
+    if not secretEngine then
+        return fallback or 0, false
+    end
+
+    local method = secretEngine[methodName]
+    if type(method) ~= "function" then
+        return fallback or 0, false
+    end
+
+    local ok, raw = pcall(method, secretEngine, ...)
+    if not ok then
+        ok, raw = pcall(method, ...)
+        if not ok then
+            return fallback or 0, false
+        end
     end
 
     return self:TryUntaintNumber(raw, fallback)

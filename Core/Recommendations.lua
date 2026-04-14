@@ -284,7 +284,7 @@ local function matchesConditions(entry, state)
         end
     end
     if conditions.resourcePctAtLeast then
-        if not state.player.primaryKnown then
+        if not state.player.primaryPctKnown then
             return fail("primary resource unknown")
         end
         if state.player.primaryPct < conditions.resourcePctAtLeast then
@@ -292,7 +292,7 @@ local function matchesConditions(entry, state)
         end
     end
     if conditions.resourcePctAtMost then
-        if not state.player.primaryKnown then
+        if not state.player.primaryPctKnown then
             return fail("primary resource unknown")
         end
         if state.player.primaryPct > conditions.resourcePctAtMost then
@@ -300,7 +300,7 @@ local function matchesConditions(entry, state)
         end
     end
     if conditions.secondaryPctAtLeast then
-        if not state.player.secondaryKnown then
+        if not state.player.secondaryPctKnown then
             return fail("secondary resource unknown")
         end
         if state.player.secondaryPct < conditions.secondaryPctAtLeast then
@@ -308,7 +308,7 @@ local function matchesConditions(entry, state)
         end
     end
     if conditions.secondaryPctAtMost then
-        if not state.player.secondaryKnown then
+        if not state.player.secondaryPctKnown then
             return fail("secondary resource unknown")
         end
         if state.player.secondaryPct > conditions.secondaryPctAtMost then

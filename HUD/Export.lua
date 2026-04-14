@@ -51,6 +51,23 @@ local function shortBool(value)
     return value and "Y" or "N"
 end
 
+local function compactStatusText(value, options)
+    value = tostring(value or "-")
+    options = options or {}
+
+    if options.stripPrefix and options.stripPrefix ~= "" then
+        value = value:gsub("^" .. options.stripPrefix .. "%s*", "")
+    end
+
+    if options.replacements then
+        for _, replacement in ipairs(options.replacements) do
+            value = value:gsub(replacement[1], replacement[2])
+        end
+    end
+
+    return shortText(value, options.limit or 28)
+end
+
 local function statusTag(isKnown)
     return isKnown and "OK" or "UNK"
 end
@@ -64,12 +81,24 @@ local function formatPct(value, isKnown)
     return string.format("%.1f%%", value)
 end
 
-local function formatResourceLine(label, current, pct, isKnown)
-    if not isKnown then
+local function formatResourceLine(label, current, pct, currentKnown, pctKnown)
+    if currentKnown and pctKnown then
+        return string.format("%s=%s (%d) [%s]", label, formatPct(pct, true), tonumber(current) or 0, statusTag(true))
+    end
+
+    if currentKnown then
+        return string.format("%s=? (%d) [%s]", label, tonumber(current) or 0, statusTag(true))
+    end
+
+    if pctKnown then
+        return string.format("%s=%s (?) [%s]", label, formatPct(pct, true), statusTag(true))
+    end
+
+    if not currentKnown and not pctKnown then
         return string.format("%s=? [%s]", label, statusTag(false))
     end
 
-    return string.format("%s=%s (%d) [%s]", label, formatPct(pct, true), tonumber(current) or 0, statusTag(true))
+    return string.format("%s=? [%s]", label, statusTag(false))
 end
 
 local function getSlotShortLabel(slot)
@@ -168,16 +197,17 @@ end
 
 function ExportHUD:CreateDebugPanel()
     self.debugPanel = createBackdropFrame(nil, self.frame)
-    self.debugPanel:SetPoint("TOPLEFT", self.frame, "BOTTOMLEFT", 0, -4)
-    self.debugPanel:SetSize(390, 126)
+    self.debugPanel:SetPoint("TOPLEFT", self.frame, "BOTTOMLEFT", 0, -6)
+    self.debugPanel:SetSize(472, 156)
     self.debugPanel:Hide()
 
     self.debugLines = {}
-    for index = 1, 7 do
+    for index = 1, 8 do
         local line = self.debugPanel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        line:SetPoint("TOPLEFT", self.debugPanel, "TOPLEFT", 10, -8 - ((index - 1) * 16))
+        line:SetPoint("TOPLEFT", self.debugPanel, "TOPLEFT", 12, -10 - ((index - 1) * 18))
         line:SetJustifyH("LEFT")
-        line:SetWidth(370)
+        line:SetWordWrap(false)
+        line:SetWidth(448)
         self.debugLines[index] = line
     end
 end
@@ -189,9 +219,36 @@ function ExportHUD:GetDiagnosticLines(state, recommendations)
     local taintStatus = addon.TaintGuard and addon.TaintGuard:GetStatusLine() or "taint: unavailable"
     local packLabel = addon.Registry and addon.Registry:GetCurrentPackLabel() or "unknown pack"
     local uiScale = (UIParent and UIParent.GetEffectiveScale and UIParent:GetEffectiveScale()) or 1
+    local compactCompatStatus = compactStatusText(compatStatus, {
+        stripPrefix = "compat:",
+        replacements = {
+            { "risks", "risk" },
+            { "^unavailable$", "compat unavailable" },
+        },
+        limit = 18,
+    })
+    local compactAdapterStatus = compactStatusText(adapterStatus, {
+        stripPrefix = "adapter:",
+        replacements = {
+            { "^SimplyGlad%s*", "SG " },
+            { "profile=", "" },
+            { "Death Knight", "DK" },
+            { "Beast Mastery", "BM" },
+            { "^unavailable$", "adapter unavailable" },
+        },
+        limit = 28,
+    })
+    local compactTaintStatus = compactStatusText(taintStatus, {
+        stripPrefix = "taint:",
+        replacements = {
+            { "^clear$", "taint clear" },
+            { "^unavailable$", "taint unavailable" },
+        },
+        limit = 22,
+    })
 
     local slotLine = {}
-    local reasonLine = {}
+    local reasonSegments = {}
     for _, slot in ipairs(addon:GetSlotOrder()) do
         local slotKey = getSlotShortLabel(slot)
         local selectedEntry = recommendations and recommendations.slots and recommendations.slots[slot] or nil
@@ -210,17 +267,25 @@ function ExportHUD:GetDiagnosticLines(state, recommendations)
             slotMessage = "paused"
         end
 
-        reasonLine[#reasonLine + 1] = string.format("%s:%s", slotKey, slotMessage)
+        reasonSegments[#reasonSegments + 1] = string.format("%s:%s", slotKey, shortText(slotMessage, 16))
+    end
+
+    local groupedReasonLines = {}
+    for index, segment in ipairs(reasonSegments) do
+        local groupIndex = math.floor((index - 1) / 3) + 1
+        groupedReasonLines[groupIndex] = groupedReasonLines[groupIndex] or {}
+        groupedReasonLines[groupIndex][#groupedReasonLines[groupIndex] + 1] = segment
     end
 
     return {
         string.format("pack=%s | spec=%s | mode=%s | enemies=%d", shortText(packLabel, 26), tostring(state.player.specID or "-"), tostring(state.mode or "-"), tonumber(state.environment.enemyCount) or 0),
         string.format("player c=%s mv=%s mt=%s pet=%s/%s | modes b=%s c=%s h=%s p=%s", shortBool(state.player.inCombat), shortBool(state.player.moving), shortBool(state.player.mounted), shortBool(state.player.petExists), shortBool(state.player.petAlive), shortBool(state.modes.burst), shortBool(state.modes.conserve), shortBool(state.modes.hold), shortBool(state.modes.pause)),
         string.format("target ex=%s al=%s ho=%s rg=%s cast=%s int=%s hp=%s [%s]", shortBool(state.target.exists), shortBool(state.target.alive), shortBool(state.target.hostile), tostring(state.target.rangeBucket or "-"), shortBool(state.target.casting), shortBool(state.target.interruptible), formatPct(state.target.healthPct, state.target.healthKnown), statusTag(state.target.healthKnown)),
-        string.format("self hp=%s [%s] | %s | %s", formatPct(state.player.healthPct, state.player.healthKnown), statusTag(state.player.healthKnown), formatResourceLine("pwr", state.player.primaryCurrent, state.player.primaryPct, state.player.primaryKnown), formatResourceLine("sec", state.player.secondaryCurrent, state.player.secondaryPct, state.player.secondaryKnown)),
+        string.format("self hp=%s [%s] | %s | %s", formatPct(state.player.healthPct, state.player.healthKnown), statusTag(state.player.healthKnown), formatResourceLine("pwr", state.player.primaryCurrent, state.player.primaryPct, state.player.primaryKnown, state.player.primaryPctKnown), formatResourceLine("sec", state.player.secondaryCurrent, state.player.secondaryPct, state.player.secondaryKnown, state.player.secondaryPctKnown)),
         table.concat(slotLine, " | "),
-        table.concat(reasonLine, " | "),
-        string.format("hud=%.2f ui=%.2f | %s | %s | %s", tonumber(addon.db.hud.scale) or 1, uiScale, compatStatus, adapterStatus, taintStatus),
+        table.concat(groupedReasonLines[1] or {}, " | "),
+        table.concat(groupedReasonLines[2] or {}, " | "),
+        string.format("hud=%.2f ui=%.2f | %s | %s | %s", tonumber(addon.db.hud.scale) or 1, uiScale, compactCompatStatus, compactAdapterStatus, compactTaintStatus),
     }
 end
 

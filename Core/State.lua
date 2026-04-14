@@ -67,42 +67,102 @@ local function percentage(current, max)
     return math.max(0, math.min(100, (current / max) * 100))
 end
 
-local function tryActionHealth(unitID, current, max, pct, isKnown)
+local function tryActionHealth(unitID, current, max, pct, currentKnown, maxKnown, pctKnown)
     local looksAlive = unitExists(unitID) and not unitDead(unitID)
 
-    if (not isKnown) or (looksAlive and max > 0 and pct <= 0) then
+    if (not pctKnown) or (looksAlive and (pct or 0) <= 0) then
         local fallbackPct, fallbackPctKnown = addon:TryActionUnitNumber(unitID, "HealthPercent", pct or 0)
+        if not fallbackPctKnown then
+            fallbackPct, fallbackPctKnown = addon:TrySecretEngineNumber("GetHealthPercent", pct or 0, unitID)
+        end
         if fallbackPctKnown then
             pct = math.max(0, math.min(fallbackPct or 0, 100))
-            isKnown = true
-        end
-
-        if not max or max <= 0 then
-            local fallbackMax, fallbackMaxKnown = addon:TryActionUnitNumber(unitID, "HealthMax", max or 0)
-            if fallbackMaxKnown and fallbackMax > 0 then
-                max = fallbackMax
-            end
-        end
-
-        if max and max > 0 and (not current or current <= 0) and isKnown and pct > 0 then
-            current = math.floor((max * pct / 100) + 0.5)
-        elseif not current or current <= 0 then
-            local fallbackCurrent, fallbackCurrentKnown = addon:TryActionUnitNumber(unitID, "Health", current or 0)
-            if fallbackCurrentKnown then
-                current = fallbackCurrent
-            end
+            pctKnown = true
         end
     end
 
-    return current or 0, max or 0, pct or 0, isKnown and (max or 0) > 0
+    if (not maxKnown) or not max or max <= 0 then
+        local fallbackMax, fallbackMaxKnown = addon:TryActionUnitNumber(unitID, "HealthMax", max or 0)
+        if fallbackMaxKnown and fallbackMax > 0 then
+            max = fallbackMax
+            maxKnown = true
+        end
+    end
+
+    if (not currentKnown) or (looksAlive and (current or 0) <= 0) then
+        local fallbackCurrent, fallbackCurrentKnown = addon:TryActionUnitNumber(unitID, "Health", current or 0)
+        if not fallbackCurrentKnown then
+            fallbackCurrent, fallbackCurrentKnown = addon:TrySecretEngineNumber("GetHealth", current or 0, unitID)
+        end
+        if fallbackCurrentKnown then
+            current = fallbackCurrent
+            currentKnown = true
+        end
+    end
+
+    if currentKnown and maxKnown and max > 0 then
+        pct = percentage(current, max)
+        pctKnown = true
+    elseif pctKnown and maxKnown and max > 0 and not currentKnown then
+        current = math.floor((max * pct / 100) + 0.5)
+        currentKnown = true
+    elseif pctKnown and looksAlive and (not maxKnown or max <= 0) and not currentKnown then
+        current = 0
+    end
+
+    if looksAlive and pctKnown and (pct or 0) <= 0 then
+        pct = 100
+    end
+
+    return current or 0, max or 0, pct or 0, pctKnown, currentKnown, maxKnown
 end
 
 local function readUnitHealth(unitID)
     local current, currentKnown = addon:TryUntaintNumber(protectedCall(UnitHealth, unitID), 0)
     local max, maxKnown = addon:TryUntaintNumber(protectedCall(UnitHealthMax, unitID), 0)
     local pct = percentage(current, max)
-    local isKnown = currentKnown and maxKnown and max > 0
-    return tryActionHealth(unitID, current, max, pct, isKnown)
+    local pctKnown = currentKnown and maxKnown and max > 0
+    return tryActionHealth(unitID, current, max, pct, currentKnown, maxKnown, pctKnown)
+end
+
+local function tryActionPower(unitID, powerType, current, max, pct, currentKnown, maxKnown, pctKnown)
+    local usePrimaryPower = powerType == nil
+
+    if usePrimaryPower and ((not pctKnown) or (not currentKnown) or (not maxKnown)) then
+        local fallbackPct, fallbackPctKnown = addon:TryActionUnitNumber(unitID, "PowerPercent", pct or 0)
+        if not fallbackPctKnown then
+            fallbackPct, fallbackPctKnown = addon:TrySecretEngineNumber("GetPowerPercent", pct or 0, unitID)
+        end
+        if fallbackPctKnown then
+            pct = math.max(0, math.min(fallbackPct or 0, 100))
+            pctKnown = true
+        end
+
+        local fallbackCurrent, fallbackCurrentKnown = addon:TryActionUnitNumber(unitID, "Power", current or 0)
+        if not fallbackCurrentKnown then
+            fallbackCurrent, fallbackCurrentKnown = addon:TrySecretEngineNumber("GetPower", current or 0, unitID)
+        end
+        if fallbackCurrentKnown then
+            current = fallbackCurrent
+            currentKnown = true
+        end
+
+        local fallbackMax, fallbackMaxKnown = addon:TryActionUnitNumber(unitID, "PowerMax", max or 0)
+        if fallbackMaxKnown and fallbackMax > 0 then
+            max = fallbackMax
+            maxKnown = true
+        end
+    end
+
+    if currentKnown and maxKnown and max > 0 then
+        pct = percentage(current, max)
+        pctKnown = true
+    elseif pctKnown and maxKnown and max > 0 and not currentKnown then
+        current = math.floor((max * pct / 100) + 0.5)
+        currentKnown = true
+    end
+
+    return current or 0, max or 0, pct or 0, currentKnown, pctKnown, maxKnown
 end
 
 local function readPower(unitID, powerType)
@@ -112,7 +172,9 @@ local function readPower(unitID, powerType)
 
     local current, currentKnown = addon:TryUntaintNumber(protectedCall(UnitPower, unitID, powerType), 0)
     local max, maxKnown = addon:TryUntaintNumber(protectedCall(UnitPowerMax, unitID, powerType), 0)
-    return current, max, percentage(current, max), currentKnown and maxKnown and max > 0
+    local pct = percentage(current, max)
+    local pctKnown = currentKnown and maxKnown and max > 0
+    return tryActionPower(unitID, powerType, current, max, pct, currentKnown, maxKnown, pctKnown)
 end
 
 local function getMode()
@@ -189,12 +251,12 @@ function State:Refresh()
 
     local playerCurrent, playerMax, playerPct, playerHealthKnown = readUnitHealth("player")
     local _, _, targetPct, targetHealthKnown = readUnitHealth("target")
-    local primaryCurrent, primaryMax, primaryPct, primaryKnown = readPower("player")
+    local primaryCurrent, primaryMax, primaryPct, primaryCurrentKnown, primaryPctKnown = readPower("player")
 
     local secondaryType = secondaryPowerByClass[classTag]
-    local secondaryCurrent, secondaryMax, secondaryPct, secondaryKnown = 0, 0, 0, false
+    local secondaryCurrent, secondaryMax, secondaryPct, secondaryCurrentKnown, secondaryPctKnown = 0, 0, 0, false, false
     if secondaryType ~= nil then
-        secondaryCurrent, secondaryMax, secondaryPct, secondaryKnown = readPower("player", secondaryType)
+        secondaryCurrent, secondaryMax, secondaryPct, secondaryCurrentKnown, secondaryPctKnown = readPower("player", secondaryType)
     end
 
     local targetExists = unitExists("target")
@@ -228,11 +290,13 @@ function State:Refresh()
             primaryCurrent = primaryCurrent,
             primaryMax = primaryMax,
             primaryPct = primaryPct,
-            primaryKnown = primaryKnown,
+            primaryKnown = primaryCurrentKnown,
+            primaryPctKnown = primaryPctKnown,
             secondaryCurrent = secondaryCurrent,
             secondaryMax = secondaryMax,
             secondaryPct = secondaryPct,
-            secondaryKnown = secondaryKnown,
+            secondaryKnown = secondaryCurrentKnown,
+            secondaryPctKnown = secondaryPctKnown,
             petExists = petExists,
             petAlive = petAlive,
         },
