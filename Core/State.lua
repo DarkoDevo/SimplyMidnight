@@ -14,6 +14,9 @@ local secondaryPowerByClass = {
     EVOKER = Enum and Enum.PowerType and Enum.PowerType.Essence or 19,
     MAGE = Enum and Enum.PowerType and Enum.PowerType.ArcaneCharges or 16,
 }
+local primaryPowerByClass = {
+    DEATHKNIGHT = Enum and Enum.PowerType and Enum.PowerType.RunicPower or 6,
+}
 
 local function protectedCall(callback, ...)
     if type(callback) ~= "function" then
@@ -358,7 +361,8 @@ function State:Refresh()
 
     local playerCurrent, playerMax, playerPct, playerHealthKnown = readUnitHealth("player")
     local _, _, targetPct, targetHealthKnown = readUnitHealth("target")
-    local primaryCurrent, primaryMax, primaryPct, primaryCurrentKnown, primaryPctKnown = readPower("player")
+    local primaryType = primaryPowerByClass[classTag]
+    local primaryCurrent, primaryMax, primaryPct, primaryCurrentKnown, primaryPctKnown = readPower("player", primaryType)
 
     local secondaryType = secondaryPowerByClass[classTag]
     local secondaryCurrent, secondaryMax, secondaryPct, secondaryCurrentKnown, secondaryPctKnown = 0, 0, 0, false, false

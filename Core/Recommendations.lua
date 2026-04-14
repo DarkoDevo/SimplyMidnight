@@ -342,9 +342,16 @@ readAura = function(unitID, spellID, filter, sourceUnit)
 
         if auraSpellMatches(spellID, normalizedSpellID) then
             local sourceToken = addon:NormalizeString(auraData.sourceUnit or auraData.unitCaster)
-            if sourceUnit and (not sourceToken or not unitExists(sourceUnit) or not unitIsUnit(sourceToken, sourceUnit)) then
-                -- Keep scanning until we find the aura from the requested source.
-            else
+            local sourceMatches = true
+            if sourceUnit and unitExists(sourceUnit) then
+                if sourceToken and unitExists(sourceToken) then
+                    sourceMatches = unitIsUnit(sourceToken, sourceUnit)
+                else
+                    sourceMatches = true
+                end
+            end
+
+            if sourceMatches then
                 local remaining = 0
                 local normalizedExpirationTime = addon:UntaintNumber(auraData.expirationTime, 0)
                 if normalizedExpirationTime > 0 then
