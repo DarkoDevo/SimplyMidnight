@@ -8,6 +8,11 @@ local playerPowerBarCache = {
     snapshot = nil,
     candidates = nil,
 }
+local thresholdPowerCache = {
+    expiresAt = 0,
+    key = nil,
+    snapshot = nil,
+}
 
 local function protectedCall(callback, ...)
     if type(callback) ~= "function" then
@@ -86,6 +91,106 @@ local function percentage(current, max)
         return 0
     end
     return math.max(0, math.min(100, (current / max) * 100))
+end
+
+local function getThresholdProbeMax(powerType)
+    local enumPowerType = Enum and Enum.PowerType or nil
+    local knownMaxes = {
+        [enumPowerType and enumPowerType.Rage or 1] = 100,
+        [enumPowerType and enumPowerType.Focus or 2] = 100,
+        [enumPowerType and enumPowerType.Energy or 3] = 100,
+        [enumPowerType and enumPowerType.ComboPoints or 4] = 5,
+        [enumPowerType and enumPowerType.Runes or 5] = 6,
+        [enumPowerType and enumPowerType.RunicPower or 6] = 100,
+        [enumPowerType and enumPowerType.SoulShards or 7] = 5,
+        [enumPowerType and enumPowerType.LunarPower or 8] = 100,
+        [enumPowerType and enumPowerType.HolyPower or 9] = 5,
+        [enumPowerType and enumPowerType.Maelstrom or 11] = 100,
+        [enumPowerType and enumPowerType.Chi or 12] = 6,
+        [enumPowerType and enumPowerType.Insanity or 13] = 100,
+        [enumPowerType and enumPowerType.ArcaneCharges or 16] = 4,
+        [enumPowerType and enumPowerType.Fury or 17] = 100,
+        [enumPowerType and enumPowerType.Pain or 18] = 100,
+        [enumPowerType and enumPowerType.Essence or 19] = 5,
+    }
+
+    return knownMaxes[tonumber(powerType) or -1]
+end
+
+local function tryThresholdCompare(unitID, powerType, threshold)
+    if type(UnitPower) ~= "function" then
+        return nil
+    end
+
+    local ok, result = pcall(function()
+        return UnitPower(unitID, powerType) >= threshold
+    end)
+    if not ok then
+        return nil
+    end
+
+    if result == true then
+        return true
+    end
+    if result == false then
+        return false
+    end
+
+    return nil
+end
+
+local function getThresholdPowerSnapshot(unitID, powerType)
+    local probeMax = getThresholdProbeMax(powerType)
+    if not unitID or not powerType or not probeMax or probeMax <= 0 then
+        return nil
+    end
+
+    local currentTime = GetTime()
+    local cacheKey = tostring(unitID) .. ":" .. tostring(powerType) .. ":" .. tostring(probeMax)
+    if thresholdPowerCache.snapshot and thresholdPowerCache.expiresAt > currentTime and thresholdPowerCache.key == cacheKey then
+        return thresholdPowerCache.snapshot
+    end
+
+    local lowerBound = 0
+    local upperBound = probeMax
+    local attempts = 0
+    local sawSignal = false
+
+    while lowerBound < upperBound do
+        local middle = math.floor((lowerBound + upperBound + 1) / 2)
+        local isAtLeast = tryThresholdCompare(unitID, powerType, middle)
+        attempts = attempts + 1
+        if isAtLeast == nil then
+            thresholdPowerCache.expiresAt = currentTime + 0.1
+            thresholdPowerCache.key = cacheKey
+            thresholdPowerCache.snapshot = {
+                max = probeMax,
+                known = false,
+                attempts = attempts,
+                mode = "compare-blocked",
+            }
+            return thresholdPowerCache.snapshot
+        end
+
+        sawSignal = true
+        if isAtLeast then
+            lowerBound = middle
+        else
+            upperBound = middle - 1
+        end
+    end
+
+    thresholdPowerCache.expiresAt = currentTime + 0.1
+    thresholdPowerCache.key = cacheKey
+    thresholdPowerCache.snapshot = {
+        current = lowerBound,
+        max = probeMax,
+        pct = percentage(lowerBound, probeMax),
+        known = sawSignal,
+        attempts = attempts,
+        mode = "threshold",
+    }
+    return thresholdPowerCache.snapshot
 end
 
 local function preferPositiveNumber(currentValue, currentKnown, candidateValue, candidateKnown)
@@ -839,6 +944,19 @@ local function tryActionPower(unitID, powerType, current, max, pct, currentKnown
             end
 
             if not typedPowerSignal and not deficitPowerSignal then
+                local thresholdSnapshot = getThresholdPowerSnapshot(unitID, powerType)
+                if thresholdSnapshot and thresholdSnapshot.known and thresholdSnapshot.max and thresholdSnapshot.max > 0 then
+                    current = thresholdSnapshot.current or 0
+                    max = thresholdSnapshot.max
+                    pct = thresholdSnapshot.pct or percentage(current, max)
+                    currentKnown = true
+                    maxKnown = true
+                    pctKnown = true
+                    typedPowerSignal = true
+                end
+            end
+
+            if not typedPowerSignal and not deficitPowerSignal then
                 local textSnapshot = getPlayerPowerTextSnapshot()
                 if textSnapshot and textSnapshot.max and textSnapshot.max > 0 then
                     current = textSnapshot.current
@@ -991,6 +1109,14 @@ local function getPlayerPrimaryPowerDebug(classTag, powerType)
     debug.textPath = textSnapshot and textSnapshot.path or nil
     debug.textRaw = textSnapshot and textSnapshot.text or nil
     debug.textCandidates = textCandidates
+
+    local thresholdSnapshot = getThresholdPowerSnapshot("player", powerType)
+    debug.thresholdCurrent = thresholdSnapshot and thresholdSnapshot.current or nil
+    debug.thresholdMax = thresholdSnapshot and thresholdSnapshot.max or nil
+    debug.thresholdPct = thresholdSnapshot and thresholdSnapshot.pct or nil
+    debug.thresholdKnown = thresholdSnapshot and thresholdSnapshot.known == true or false
+    debug.thresholdMode = thresholdSnapshot and thresholdSnapshot.mode or nil
+    debug.thresholdAttempts = thresholdSnapshot and thresholdSnapshot.attempts or nil
 
     local secretTyped, secretTypedKnown = addon:TrySecretEngineNumber("GetPower", 0, "player", powerType)
     debug.secretTyped = secretTypedKnown and secretTyped or nil

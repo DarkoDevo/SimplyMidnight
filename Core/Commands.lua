@@ -75,7 +75,7 @@ local function printDiagnostics()
             end
 
             addon:Print(string.format(
-                "pwrsrc rawT=%s raw=%s actP=%s actD=%s actU=%s actUD=%s secT=%s sec=%s",
+                "pwrsrc rawT=%s raw=%s actP=%s actD=%s actU=%s actUD=%s secT=%s sec=%s thr=%s/%s",
                 fmt(primaryDebug.rawTyped),
                 fmt(primaryDebug.rawUntyped),
                 fmt(primaryDebug.actionPlayer),
@@ -83,8 +83,20 @@ local function printDiagnostics()
                 fmt(primaryDebug.actionUnit),
                 fmt(primaryDebug.actionUnitDeficit),
                 fmt(primaryDebug.secretTyped),
-                fmt(primaryDebug.secretUntyped)
+                fmt(primaryDebug.secretUntyped),
+                fmt(primaryDebug.thresholdCurrent),
+                fmt(primaryDebug.thresholdMax)
             ))
+
+            if primaryDebug.thresholdMode then
+                addon:Print(string.format(
+                    "pwrthr mode=%s known=%s pct=%s attempts=%s",
+                    tostring(primaryDebug.thresholdMode),
+                    tostring(primaryDebug.thresholdKnown),
+                    fmt(primaryDebug.thresholdPct),
+                    fmt(primaryDebug.thresholdAttempts)
+                ))
+            end
 
             if primaryDebug.framePath then
                 addon:Print(string.format(
