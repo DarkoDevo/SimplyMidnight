@@ -75,12 +75,13 @@ local function printDiagnostics()
             end
 
             addon:Print(string.format(
-                "pwrsrc rawT=%s raw=%s actP=%s actD=%s actU=%s secT=%s sec=%s",
+                "pwrsrc rawT=%s raw=%s actP=%s actD=%s actU=%s actUD=%s secT=%s sec=%s",
                 fmt(primaryDebug.rawTyped),
                 fmt(primaryDebug.rawUntyped),
                 fmt(primaryDebug.actionPlayer),
                 fmt(primaryDebug.actionDeficit),
                 fmt(primaryDebug.actionUnit),
+                fmt(primaryDebug.actionUnitDeficit),
                 fmt(primaryDebug.secretTyped),
                 fmt(primaryDebug.secretUntyped)
             ))

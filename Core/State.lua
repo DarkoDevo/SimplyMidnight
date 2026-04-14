@@ -234,6 +234,36 @@ local function tryActionPower(unitID, powerType, current, max, pct, currentKnown
                 maxKnown = true
             end
 
+            local actionUntypedDeficit, actionUntypedDeficitKnown = addon:TryActionUnitNumber(unitID, "PowerDeficit", 0)
+            if actionUntypedDeficitKnown then
+                local deficitBaseMax = (maxKnown and max and max > 0) and max or 100
+                local derivedCurrent = math.max(0, deficitBaseMax - math.max(0, tonumber(actionUntypedDeficit) or 0))
+                if not typedPowerSignal then
+                    current = derivedCurrent
+                    currentKnown = true
+                    pct = percentage(derivedCurrent, deficitBaseMax)
+                    pctKnown = true
+                else
+                    current, currentKnown = preferPositiveNumber(current, currentKnown, derivedCurrent, true)
+                    pct, pctKnown = preferPositiveNumber(pct, pctKnown, percentage(derivedCurrent, deficitBaseMax), true)
+                end
+            end
+
+            local actionUntypedDeficitPct, actionUntypedDeficitPctKnown = addon:TryActionUnitNumber(unitID, "PowerDeficitPercent", 0)
+            if actionUntypedDeficitPctKnown then
+                local derivedPct = math.max(0, math.min(100, 100 - (tonumber(actionUntypedDeficitPct) or 0)))
+                if not typedPowerSignal then
+                    pct = derivedPct
+                    pctKnown = true
+                    if maxKnown and max and max > 0 then
+                        current = math.floor((max * derivedPct / 100) + 0.5)
+                        currentKnown = true
+                    end
+                else
+                    pct, pctKnown = preferPositiveNumber(pct, pctKnown, derivedPct, true)
+                end
+            end
+
             local secretUntypedPct, secretUntypedPctKnown = addon:TrySecretEngineNumber("GetPowerPercent", pct or 0, unitID)
             pct, pctKnown = preferPositiveNumber(pct, pctKnown, secretUntypedPct, secretUntypedPctKnown)
 
@@ -342,6 +372,9 @@ local function getPlayerPrimaryPowerDebug(classTag, powerType)
 
     local actionUnit, actionUnitKnown = addon:TryActionUnitNumber("player", "Power", 0)
     debug.actionUnit = actionUnitKnown and actionUnit or nil
+
+    local actionUnitDeficit, actionUnitDeficitKnown = addon:TryActionUnitNumber("player", "PowerDeficit", 0)
+    debug.actionUnitDeficit = actionUnitDeficitKnown and actionUnitDeficit or nil
 
     local secretTyped, secretTypedKnown = addon:TrySecretEngineNumber("GetPower", 0, "player", powerType)
     debug.secretTyped = secretTypedKnown and secretTyped or nil

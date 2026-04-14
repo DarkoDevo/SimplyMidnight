@@ -403,9 +403,9 @@ function ExportHUD:Render(state, recommendations)
     self:RenderStateCell("cast", state.target.casting and state.target.interruptible, { 0.85, 0.2, 1.0 }, { 0.15, 0.1, 0.2 })
     self:RenderStateCell("overlay", state.modes.overlay, { 0.35, 1.0, 0.95 }, { 0.1, 0.2, 0.2 })
 
-    setBar(self.playerBar, state.player.healthPct)
-    setBar(self.targetBar, state.target.healthPct)
-    setBar(self.resourceBar, state.player.primaryPct)
+    setBar(self.playerBar, state.player.healthKnown and state.player.healthPct or 0)
+    setBar(self.targetBar, state.target.healthKnown and state.target.healthPct or 0)
+    setBar(self.resourceBar, state.player.primaryPctKnown and state.player.primaryPct or 0)
 
     if addon.session.debug then
         local lines = self:GetDiagnosticLines(state, recommendations)
