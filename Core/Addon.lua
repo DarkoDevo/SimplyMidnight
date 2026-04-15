@@ -9,15 +9,6 @@ local bootstrapEvents = {
     "PLAYER_LOGIN",
 }
 local runtimeFrameEvents = {
-    "PLAYER_ENTERING_WORLD",
-    "PLAYER_SPECIALIZATION_CHANGED",
-    "DISPLAY_SIZE_CHANGED",
-    "ADDON_ACTION_BLOCKED",
-    "ADDON_ACTION_FORBIDDEN",
-    "MACRO_ACTION_BLOCKED",
-    "COMBAT_LOG_EVENT_UNFILTERED",
-    "PLAYER_REGEN_DISABLED",
-    "PLAYER_REGEN_ENABLED",
 }
 local runtimeFrameEventsRegistered = false
 
