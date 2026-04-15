@@ -7,6 +7,8 @@ local dispatchRuntimeEvent
 local bootstrapEvents = {
     "ADDON_LOADED",
     "PLAYER_LOGIN",
+}
+local runtimeFrameEvents = {
     "PLAYER_ENTERING_WORLD",
     "PLAYER_SPECIALIZATION_CHANGED",
     "DISPLAY_SIZE_CHANGED",
@@ -17,6 +19,7 @@ local bootstrapEvents = {
     "PLAYER_REGEN_DISABLED",
     "PLAYER_REGEN_ENABLED",
 }
+local runtimeFrameEventsRegistered = false
 
 local function deepCopy(value)
     if type(value) ~= "table" then
@@ -632,6 +635,32 @@ dispatchRuntimeEvent = function(event, ...)
     end
 end
 
+local function canRegisterRuntimeEvents()
+    if type(InCombatLockdown) == "function" then
+        return not InCombatLockdown()
+    end
+
+    return true
+end
+
+local function ensureRuntimeEventsRegistered()
+    if runtimeFrameEventsRegistered or not bootstrapFrame then
+        return runtimeFrameEventsRegistered
+    end
+
+    if not canRegisterRuntimeEvents() then
+        return false
+    end
+
+    for _, eventName in ipairs(runtimeFrameEvents) do
+        bootstrapFrame:RegisterEvent(eventName)
+    end
+
+    runtimeFrameEventsRegistered = true
+    bootstrapFrame:SetScript("OnUpdate", nil)
+    return true
+end
+
 bootstrapFrame = CreateFrame("Frame")
 for _, eventName in ipairs(bootstrapEvents) do
     bootstrapFrame:RegisterEvent(eventName)
@@ -641,6 +670,11 @@ bootstrapFrame:SetScript("OnEvent", function(_, event, ...)
     if event == "ADDON_LOADED" and arg1 == addonName then
         addon:InitializeDatabase()
     elseif event == "PLAYER_LOGIN" then
+        if not ensureRuntimeEventsRegistered() then
+            bootstrapFrame:SetScript("OnUpdate", function()
+                ensureRuntimeEventsRegistered()
+            end)
+        end
         addon:InitializeModules()
         addon:Print("Loaded v" .. addon.version)
     else
