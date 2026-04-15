@@ -1,7 +1,37 @@
 import "./style.css";
 import { getOverlayProfile, getOverlayProfileKeys } from "./profiles";
 
+const isMirrorMode = new URLSearchParams(window.location.search).get("mirror") === "1";
+
+if (isMirrorMode) {
+  const app = document.querySelector("#app");
+  const mirrorApp = document.querySelector("#mirrorApp");
+  const mirrorCanvas = document.querySelector("#mirrorCanvas");
+  const mirrorContext = mirrorCanvas.getContext("2d");
+  const frameImage = new Image();
+
+  if (app) app.hidden = true;
+  if (mirrorApp) mirrorApp.hidden = false;
+
+  frameImage.addEventListener("load", () => {
+    mirrorCanvas.width = frameImage.width;
+    mirrorCanvas.height = frameImage.height;
+    mirrorContext.imageSmoothingEnabled = false;
+    mirrorContext.clearRect(0, 0, mirrorCanvas.width, mirrorCanvas.height);
+    mirrorContext.drawImage(frameImage, 0, 0);
+  });
+
+  if (window.simplyMidnightApi) {
+    window.simplyMidnightApi.onMirrorFrame((payload) => {
+      if (!payload || !payload.dataUrl) {
+        return;
+      }
+      frameImage.src = payload.dataUrl;
+    });
+  }
+} else {
 const captureButton = document.querySelector("#captureButton");
+const mirrorButton = document.querySelector("#mirrorButton");
 const alwaysOnTop = document.querySelector("#alwaysOnTop");
 const profileSelect = document.querySelector("#profileSelect");
 const profileMeta = document.querySelector("#profileMeta");
@@ -17,6 +47,8 @@ const context = canvas.getContext("2d");
 
 let activeStream = null;
 let frameHandle = null;
+let mirrorEnabled = false;
+let lastMirrorPushAt = 0;
 
 const storageKey = "simplymidnight-overlay-settings";
 
@@ -33,6 +65,7 @@ function writeSettings() {
     storageKey,
     JSON.stringify({
       profile: profileSelect.value,
+      mirrorEnabled,
       cropX: cropX.value,
       cropY: cropY.value,
       cropW: cropW.value,
@@ -46,6 +79,7 @@ function writeSettings() {
 function applyStoredSettings() {
   const saved = readSettings();
   if (saved.profile != null) profileSelect.value = saved.profile;
+  if (saved.mirrorEnabled != null) mirrorEnabled = Boolean(saved.mirrorEnabled);
   if (saved.cropX != null) cropX.value = saved.cropX;
   if (saved.cropY != null) cropY.value = saved.cropY;
   if (saved.cropW != null) cropW.value = saved.cropW;
@@ -76,7 +110,23 @@ function applyProfilePreset({ keepPosition = true } = {}) {
   cropH.value = String(profile.cropH);
   scaleInput.value = String(profile.scale);
   profileMeta.textContent = `${profile.description} | ${profile.cropW}x${profile.cropH} @ ${profile.scale}x`;
+  updateMirrorButton();
+  updateMirrorBounds();
   writeSettings();
+}
+
+async function updateMirrorBounds() {
+  if (!window.simplyMidnightApi || !mirrorEnabled) {
+    return;
+  }
+
+  const width = Math.floor((Math.max(Number(cropW.value) || 390, 1)) * (Math.max(Number(scaleInput.value) || 1, 0.25)));
+  const height = Math.floor((Math.max(Number(cropH.value) || 132, 1)) * (Math.max(Number(scaleInput.value) || 1, 0.25)));
+  await window.simplyMidnightApi.setMirrorBounds(width, height);
+}
+
+function updateMirrorButton() {
+  mirrorButton.textContent = mirrorEnabled ? "Close Mirror" : "Open Mirror";
 }
 
 function stopLoop() {
@@ -103,6 +153,18 @@ function drawFrame() {
   context.imageSmoothingEnabled = false;
   context.clearRect(0, 0, canvas.width, canvas.height);
   context.drawImage(video, x, y, width, height, 0, 0, canvas.width, canvas.height);
+
+  if (mirrorEnabled && window.simplyMidnightApi) {
+    const now = performance.now();
+    if ((now - lastMirrorPushAt) >= 100) {
+      lastMirrorPushAt = now;
+      window.simplyMidnightApi.sendMirrorFrame({
+        dataUrl: canvas.toDataURL("image/png"),
+        width: canvas.width,
+        height: canvas.height
+      });
+    }
+  }
 
   frameHandle = requestAnimationFrame(drawFrame);
 }
@@ -140,6 +202,17 @@ async function startCapture() {
 }
 
 captureButton.addEventListener("click", startCapture);
+mirrorButton.addEventListener("click", async () => {
+  mirrorEnabled = !mirrorEnabled;
+  updateMirrorButton();
+  writeSettings();
+  if (window.simplyMidnightApi) {
+    await window.simplyMidnightApi.setMirrorEnabled(mirrorEnabled);
+    if (mirrorEnabled) {
+      await updateMirrorBounds();
+    }
+  }
+});
 
 alwaysOnTop.addEventListener("change", async () => {
   writeSettings();
@@ -156,6 +229,7 @@ alwaysOnTop.addEventListener("change", async () => {
 
 [cropX, cropY, cropW, cropH, scaleInput].forEach((element) => {
   element.addEventListener("input", () => {
+    updateMirrorBounds();
     writeSettings();
   });
 });
@@ -163,6 +237,7 @@ alwaysOnTop.addEventListener("change", async () => {
 populateProfiles();
 applyStoredSettings();
 applyProfilePreset();
+updateMirrorButton();
 
 if (window.simplyMidnightApi) {
   window.simplyMidnightApi.setAlwaysOnTop(alwaysOnTop.checked);
@@ -170,4 +245,8 @@ if (window.simplyMidnightApi) {
     const profile = getOverlayProfile(profileSelect.value);
     status.textContent = `Ready | overlay v${meta.version} | ${profile.label}`;
   });
+  if (mirrorEnabled) {
+    window.simplyMidnightApi.setMirrorEnabled(true).then(() => updateMirrorBounds());
+  }
+}
 }

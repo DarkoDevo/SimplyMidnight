@@ -16,6 +16,7 @@
 
         <div class="controls">
           <button id="captureButton">Start Capture</button>
+          <button id="mirrorButton">Open Mirror</button>
           <label class="checkbox">
             <input id="alwaysOnTop" type="checkbox" checked />
             Always on top
@@ -53,6 +54,10 @@
         <video id="sourceVideo" autoplay playsinline muted hidden></video>
         <canvas id="previewCanvas" width="780" height="264"></canvas>
       </main>
+    </div>
+
+    <div id="mirrorApp" hidden>
+      <canvas id="mirrorCanvas" width="708" height="168"></canvas>
     </div>
   </body>
 </html>
