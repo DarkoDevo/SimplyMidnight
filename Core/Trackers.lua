@@ -230,12 +230,22 @@ function Trackers:GetEstimatedPrimaryResource(config, hints)
     local rawCurrent = tonumber(hints.rawCurrent)
     local rawKnown = hints.rawKnown == true
 
+    estimate.debug = estimate.debug or {}
+    estimate.debug.generated = 0
+    estimate.debug.spent = 0
+    estimate.debug.seeded = 0
+    estimate.debug.totalGenerated = estimate.totalGenerated or 0
+    estimate.debug.totalSpent = estimate.totalSpent or 0
+    estimate.debug.lastSpellID = estimate.lastObservedSpellID
+
     if rawKnown then
         estimate.current = clamp(rawCurrent, 0, maxValue)
         estimate.known = true
     elseif config.resetOutOfCombat and not inCombat then
         estimate.current = clamp(config.defaultCurrent or 0, 0, maxValue)
         estimate.known = true
+        estimate.lastObservedSpellID = nil
+        estimate.debug.lastSpellID = nil
     else
         local generated = 0
         local seeded = 0
