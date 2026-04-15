@@ -78,20 +78,46 @@ function populateProfiles() {
   profileSelect.replaceChildren(fragment);
 }
 
+function formatSourceLabel(source) {
+  if (!source) {
+    return "Unknown source";
+  }
+
+  if (source.kind === "screen") {
+    const display = source.display;
+    if (display && display.bounds) {
+      const primaryText = display.primary ? " | primary" : "";
+      return `${source.name} | ${display.bounds.width}x${display.bounds.height} @ ${display.bounds.x},${display.bounds.y}${primaryText}`;
+    }
+    return `${source.name} | monitor`;
+  }
+
+  if (source.displayId) {
+    return `${source.name} | window on display ${source.displayId}`;
+  }
+
+  return `${source.name} | window`;
+}
+
 function pickPreferredSource(sources) {
   const saved = readSettings();
   if (saved.sourceId && sources.some((source) => source.id === saved.sourceId)) {
     return saved.sourceId;
   }
 
+  const primaryScreen = sources.find((source) => source.kind === "screen" && source.display && source.display.primary);
+  if (primaryScreen) {
+    return primaryScreen.id;
+  }
+
+  const anyScreen = sources.find((source) => source.kind === "screen");
+  if (anyScreen) {
+    return anyScreen.id;
+  }
+
   const wowWindow = sources.find((source) => /world of warcraft/i.test(source.name));
   if (wowWindow) {
     return wowWindow.id;
-  }
-
-  const primaryScreen = sources.find((source) => source.id.startsWith("screen:"));
-  if (primaryScreen) {
-    return primaryScreen.id;
   }
 
   return sources[0] ? sources[0].id : "";
@@ -109,7 +135,7 @@ async function refreshCaptureSources() {
     for (const source of sources) {
       const option = document.createElement("option");
       option.value = source.id;
-      option.textContent = source.name;
+      option.textContent = formatSourceLabel(source);
       fragment.appendChild(option);
     }
 
@@ -129,7 +155,7 @@ async function refreshCaptureSources() {
 
     const selectedSource = sources.find((source) => source.id === sourceSelect.value);
     sourceMeta.textContent = selectedSource
-      ? `Selected: ${selectedSource.name}`
+      ? `Selected: ${formatSourceLabel(selectedSource)}`
       : "Choose the WoW window or your main monitor before starting capture.";
 
     status.textContent = `Ready | ${sources.length} capture source${sources.length === 1 ? "" : "s"} found`;

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, desktopCapturer } = require("electron");
+const { app, BrowserWindow, ipcMain, desktopCapturer, screen } = require("electron");
 const path = require("path");
 
 const isDev = Boolean(process.env.VITE_DEV_SERVER_URL);
@@ -80,6 +80,21 @@ ipcMain.handle("overlay:set-always-on-top", (_, value) => {
 });
 
 ipcMain.handle("overlay:list-capture-sources", async () => {
+  const displays = screen.getAllDisplays();
+  const displayMap = new Map(
+    displays.map((display) => [
+      String(display.id),
+      {
+        id: display.id,
+        bounds: display.bounds,
+        size: display.size,
+        scaleFactor: display.scaleFactor,
+        rotation: display.rotation,
+        primary: display.bounds.x === 0 && display.bounds.y === 0
+      }
+    ])
+  );
+
   const sources = await desktopCapturer.getSources({
     types: ["window", "screen"],
     thumbnailSize: {
@@ -92,6 +107,8 @@ ipcMain.handle("overlay:list-capture-sources", async () => {
     id: source.id,
     name: source.name,
     displayId: source.display_id || "",
+    kind: source.id.startsWith("screen:") ? "screen" : "window",
+    display: source.display_id ? displayMap.get(String(source.display_id)) || null : null,
     thumbnailDataUrl: source.thumbnail && !source.thumbnail.isEmpty() ? source.thumbnail.toDataURL() : null
   }));
 });
