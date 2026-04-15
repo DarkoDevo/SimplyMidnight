@@ -21,6 +21,10 @@
             <input id="alwaysOnTop" type="checkbox" checked />
             Mirror always on top
           </label>
+          <label class="checkbox">
+            <input id="hideControlOnCapture" type="checkbox" checked />
+            Hide control while capturing screens
+          </label>
         </div>
 
         <div class="presetRow">
@@ -37,7 +41,10 @@
               Capture Source
               <select id="sourceSelect"></select>
             </label>
-            <button id="refreshSourcesButton" type="button">Refresh Sources</button>
+            <div class="sourceActions">
+              <button id="refreshSourcesButton" type="button">Refresh Sources</button>
+              <button id="identifyScreensButton" type="button">Identify Screens</button>
+            </div>
           </div>
           <div id="sourceMeta" class="profileMeta">Choose the WoW window or your main monitor before starting capture.</div>
         </div>
@@ -54,8 +61,9 @@
           <p>1. Start the addon in WoW and unlock the HUD if you need to move it.</p>
           <p>1a. In WoW, use <strong>/sm export ggl_legacy_5slot</strong> or another named profile so the addon and overlay are aiming at the same contract.</p>
           <p>2. Click <strong>Start Capture</strong> and pick the WoW window or monitor.</p>
-          <p>3. Adjust crop values until the mirrored export strip fills the preview.</p>
-          <p>4. Transparent click-through overlay mode is reserved for a later phase.</p>
+          <p>3. If monitor labels are confusing, use <strong>Identify Screens</strong> to flash each display with its bounds.</p>
+          <p>4. Adjust crop values until the mirrored export strip fills the preview.</p>
+          <p>5. Transparent click-through overlay mode is reserved for a later phase.</p>
         </div>
 
         <p id="status">Idle</p>

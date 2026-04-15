@@ -10,12 +10,14 @@ const profileSelect = document.querySelector("#profileSelect");
 const profileMeta = document.querySelector("#profileMeta");
 const sourceSelect = document.querySelector("#sourceSelect");
 const refreshSourcesButton = document.querySelector("#refreshSourcesButton");
+const identifyScreensButton = document.querySelector("#identifyScreensButton");
 const sourceMeta = document.querySelector("#sourceMeta");
 const cropX = document.querySelector("#cropX");
 const cropY = document.querySelector("#cropY");
 const cropW = document.querySelector("#cropW");
 const cropH = document.querySelector("#cropH");
 const scaleInput = document.querySelector("#scale");
+const hideControlOnCapture = document.querySelector("#hideControlOnCapture");
 const status = document.querySelector("#status");
 const video = document.querySelector("#sourceVideo");
 const canvas = document.querySelector("#previewCanvas");
@@ -25,6 +27,7 @@ let activeStream = null;
 let frameHandle = null;
 let mirrorEnabled = false;
 let lastMirrorPushAt = 0;
+let captureSources = [];
 
 const storageKey = "simplymidnight-overlay-settings";
 
@@ -48,6 +51,7 @@ function writeSettings() {
       cropW: cropW.value,
       cropH: cropH.value,
       scale: scaleInput.value,
+      hideControlOnCapture: hideControlOnCapture.checked,
       alwaysOnTop: alwaysOnTop.checked
     })
   );
@@ -63,6 +67,7 @@ function applyStoredSettings() {
   if (saved.cropW != null) cropW.value = saved.cropW;
   if (saved.cropH != null) cropH.value = saved.cropH;
   if (saved.scale != null) scaleInput.value = saved.scale;
+  if (saved.hideControlOnCapture != null) hideControlOnCapture.checked = saved.hideControlOnCapture;
   if (saved.alwaysOnTop != null) alwaysOnTop.checked = saved.alwaysOnTop;
 }
 
@@ -123,6 +128,23 @@ function pickPreferredSource(sources) {
   return sources[0] ? sources[0].id : "";
 }
 
+function describeSelectedSource() {
+  const selectedSource = captureSources.find((source) => source.id === sourceSelect.value);
+
+  if (!selectedSource) {
+    sourceMeta.textContent = "Choose the WoW window or your main monitor before starting capture.";
+    return null;
+  }
+
+  if (selectedSource.kind === "screen") {
+    sourceMeta.textContent = `Selected: ${formatSourceLabel(selectedSource)}. Screen capture includes anything visible on that monitor unless the control window is hidden or moved away.`;
+  } else {
+    sourceMeta.textContent = `Selected: ${formatSourceLabel(selectedSource)}. Window capture is usually cleaner if WoW is running in Windowed or Windowed (Fullscreen).`;
+  }
+
+  return selectedSource;
+}
+
 async function refreshCaptureSources() {
   if (!window.simplyMidnightApi || !window.simplyMidnightApi.listCaptureSources) {
     sourceMeta.textContent = "Capture source listing is unavailable in this build.";
@@ -131,6 +153,7 @@ async function refreshCaptureSources() {
 
   try {
     const sources = await window.simplyMidnightApi.listCaptureSources();
+    captureSources = sources;
     const fragment = document.createDocumentFragment();
     for (const source of sources) {
       const option = document.createElement("option");
@@ -153,10 +176,7 @@ async function refreshCaptureSources() {
       return;
     }
 
-    const selectedSource = sources.find((source) => source.id === sourceSelect.value);
-    sourceMeta.textContent = selectedSource
-      ? `Selected: ${formatSourceLabel(selectedSource)}`
-      : "Choose the WoW window or your main monitor before starting capture.";
+    describeSelectedSource();
 
     status.textContent = `Ready | ${sources.length} capture source${sources.length === 1 ? "" : "s"} found`;
     writeSettings();
@@ -254,6 +274,19 @@ async function startCapture() {
   }
 
   try {
+    const selectedSource = captureSources.find((source) => source.id === sourceId);
+
+    if (
+      hideControlOnCapture.checked &&
+      selectedSource &&
+      selectedSource.kind === "screen" &&
+      window.simplyMidnightApi &&
+      window.simplyMidnightApi.prepareCleanCapture
+    ) {
+      status.textContent = "Preparing clean screen capture...";
+      await window.simplyMidnightApi.prepareCleanCapture();
+    }
+
     if (window.simplyMidnightApi && window.simplyMidnightApi.setSelectedCaptureSource) {
       await window.simplyMidnightApi.setSelectedCaptureSource(sourceId);
     }
@@ -286,6 +319,11 @@ captureButton.addEventListener("click", startCapture);
 refreshSourcesButton.addEventListener("click", async () => {
   await refreshCaptureSources();
 });
+identifyScreensButton.addEventListener("click", async () => {
+  if (window.simplyMidnightApi && window.simplyMidnightApi.identifyDisplays) {
+    await window.simplyMidnightApi.identifyDisplays();
+  }
+});
 mirrorButton.addEventListener("click", async () => {
   mirrorEnabled = !mirrorEnabled;
   updateMirrorButton();
@@ -305,13 +343,16 @@ alwaysOnTop.addEventListener("change", async () => {
   }
 });
 
+hideControlOnCapture.addEventListener("change", () => {
+  writeSettings();
+});
+
 profileSelect.addEventListener("change", () => {
   applyProfilePreset();
 });
 
 sourceSelect.addEventListener("change", () => {
-  const label = sourceSelect.options[sourceSelect.selectedIndex]?.textContent;
-  sourceMeta.textContent = label ? `Selected: ${label}` : "Choose the WoW window or your main monitor before starting capture.";
+  describeSelectedSource();
   writeSettings();
 });
 

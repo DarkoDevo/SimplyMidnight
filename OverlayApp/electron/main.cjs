@@ -6,6 +6,8 @@ const isDev = Boolean(process.env.VITE_DEV_SERVER_URL);
 let mainWindow = null;
 let mirrorWindow = null;
 let selectedCaptureSourceId = null;
+let identifyWindows = [];
+let identifyTimeout = null;
 
 function syncMainWindowTopmost() {
   if (!mainWindow || mainWindow.isDestroyed()) {
@@ -28,6 +30,94 @@ function loadWindow(window, mirrorMode = false) {
   } else {
     window.loadFile(path.join(__dirname, "..", "dist", "index.html"));
   }
+}
+
+function clearIdentifyWindows() {
+  if (identifyTimeout) {
+    clearTimeout(identifyTimeout);
+    identifyTimeout = null;
+  }
+
+  for (const window of identifyWindows) {
+    if (window && !window.isDestroyed()) {
+      window.close();
+    }
+  }
+
+  identifyWindows = [];
+}
+
+function showDisplayIdentifiers(durationMs = 2500) {
+  clearIdentifyWindows();
+
+  const displays = screen.getAllDisplays();
+  const primaryDisplay = screen.getPrimaryDisplay();
+
+  identifyWindows = displays.map((display, index) => {
+    const overlay = new BrowserWindow({
+      x: display.bounds.x,
+      y: display.bounds.y,
+      width: display.bounds.width,
+      height: display.bounds.height,
+      frame: false,
+      transparent: true,
+      resizable: false,
+      movable: false,
+      minimizable: false,
+      maximizable: false,
+      fullscreenable: false,
+      focusable: false,
+      skipTaskbar: true,
+      alwaysOnTop: true,
+      backgroundColor: "#00000000",
+      webPreferences: {
+        contextIsolation: true,
+        nodeIntegration: false
+      }
+    });
+
+    overlay.setIgnoreMouseEvents(true, { forward: true });
+    overlay.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+
+    const label = `Display ${index + 1}${display.id === primaryDisplay.id ? " | primary" : ""}`;
+    const details = `${display.bounds.width}x${display.bounds.height} @ ${display.bounds.x},${display.bounds.y}`;
+    const html = `
+      <!doctype html>
+      <html>
+        <body style="
+          margin: 0;
+          width: 100vw;
+          height: 100vh;
+          display: grid;
+          place-items: center;
+          background: rgba(2, 6, 12, 0.12);
+          overflow: hidden;
+          font-family: Arial, sans-serif;
+          color: white;
+        ">
+          <div style="
+            min-width: 320px;
+            padding: 24px 32px;
+            border: 2px solid rgba(141, 199, 255, 0.9);
+            border-radius: 18px;
+            background: rgba(5, 10, 20, 0.88);
+            box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+            text-align: center;
+          ">
+            <div style="font-size: 52px; font-weight: 700; color: #8dc7ff;">${label}</div>
+            <div style="margin-top: 10px; font-size: 22px; color: #d8e7ff;">${details}</div>
+          </div>
+        </body>
+      </html>
+    `;
+
+    overlay.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+    return overlay;
+  });
+
+  identifyTimeout = setTimeout(() => {
+    clearIdentifyWindows();
+  }, Math.max(Number(durationMs) || 2500, 1000));
 }
 
 function createWindow() {
@@ -96,6 +186,7 @@ ipcMain.handle("overlay:set-always-on-top", (_, value) => {
 
 ipcMain.handle("overlay:list-capture-sources", async () => {
   const displays = screen.getAllDisplays();
+  const primaryDisplay = screen.getPrimaryDisplay();
   const displayMap = new Map(
     displays.map((display) => [
       String(display.id),
@@ -105,7 +196,7 @@ ipcMain.handle("overlay:list-capture-sources", async () => {
         size: display.size,
         scaleFactor: display.scaleFactor,
         rotation: display.rotation,
-        primary: display.bounds.x === 0 && display.bounds.y === 0
+        primary: display.id === primaryDisplay.id
       }
     ])
   );
@@ -126,6 +217,26 @@ ipcMain.handle("overlay:list-capture-sources", async () => {
     display: source.display_id ? displayMap.get(String(source.display_id)) || null : null,
     thumbnailDataUrl: source.thumbnail && !source.thumbnail.isEmpty() ? source.thumbnail.toDataURL() : null
   }));
+});
+
+ipcMain.handle("overlay:identify-displays", () => {
+  showDisplayIdentifiers();
+  return true;
+});
+
+ipcMain.handle("overlay:prepare-clean-capture", async () => {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return false;
+  }
+
+  mainWindow.setAlwaysOnTop(false);
+  mainWindow.minimize();
+
+  await new Promise((resolve) => {
+    setTimeout(resolve, 350);
+  });
+
+  return true;
 });
 
 ipcMain.handle("overlay:set-selected-source", (_, sourceId) => {
@@ -207,4 +318,8 @@ app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
     app.quit();
   }
+});
+
+app.on("before-quit", () => {
+  clearIdentifyWindows();
 });

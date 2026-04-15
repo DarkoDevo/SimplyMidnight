@@ -61,6 +61,13 @@ body.mirror-mode {
   align-items: end;
 }
 
+.sourceActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
 .profileMeta {
   margin-top: 8px;
   color: #a9bddf;

@@ -4,6 +4,12 @@ contextBridge.exposeInMainWorld("simplyMidnightApi", {
   listCaptureSources() {
     return ipcRenderer.invoke("overlay:list-capture-sources");
   },
+  identifyDisplays() {
+    return ipcRenderer.invoke("overlay:identify-displays");
+  },
+  prepareCleanCapture() {
+    return ipcRenderer.invoke("overlay:prepare-clean-capture");
+  },
   setSelectedCaptureSource(sourceId) {
     return ipcRenderer.invoke("overlay:set-selected-source", sourceId);
   },
