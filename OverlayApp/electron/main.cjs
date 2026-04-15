@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain } = require("electron");
+const { app, BrowserWindow, ipcMain, desktopCapturer } = require("electron");
 const path = require("path");
 
 const isDev = Boolean(process.env.VITE_DEV_SERVER_URL);
@@ -83,6 +83,23 @@ ipcMain.handle("overlay:set-always-on-top", (_, value) => {
     mirrorWindow.setAlwaysOnTop(Boolean(value));
   }
   return true;
+});
+
+ipcMain.handle("overlay:list-capture-sources", async () => {
+  const sources = await desktopCapturer.getSources({
+    types: ["window", "screen"],
+    thumbnailSize: {
+      width: 320,
+      height: 180
+    }
+  });
+
+  return sources.map((source) => ({
+    id: source.id,
+    name: source.name,
+    displayId: source.display_id || "",
+    thumbnailDataUrl: source.thumbnail && !source.thumbnail.isEmpty() ? source.thumbnail.toDataURL() : null
+  }));
 });
 
 ipcMain.handle("overlay:set-mirror-enabled", (_, value) => {

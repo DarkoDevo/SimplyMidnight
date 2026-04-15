@@ -131,24 +131,46 @@ async function refreshCaptureSources() {
     return;
   }
 
-  const sources = await window.simplyMidnightApi.listCaptureSources();
-  const fragment = document.createDocumentFragment();
-  for (const source of sources) {
+  try {
+    const sources = await window.simplyMidnightApi.listCaptureSources();
+    const fragment = document.createDocumentFragment();
+    for (const source of sources) {
+      const option = document.createElement("option");
+      option.value = source.id;
+      option.textContent = source.name;
+      fragment.appendChild(option);
+    }
+
+    sourceSelect.replaceChildren(fragment);
+    sourceSelect.value = pickPreferredSource(sources);
+
+    if (sources.length === 0) {
+      const option = document.createElement("option");
+      option.value = "";
+      option.textContent = "No sources found";
+      sourceSelect.replaceChildren(option);
+      sourceMeta.textContent = "Electron did not return any capture sources yet. Try Refresh Sources.";
+      status.textContent = "No capture sources available";
+      writeSettings();
+      return;
+    }
+
+    const selectedSource = sources.find((source) => source.id === sourceSelect.value);
+    sourceMeta.textContent = selectedSource
+      ? `Selected: ${selectedSource.name}`
+      : "Choose the WoW window or your main monitor before starting capture.";
+
+    status.textContent = `Ready | ${sources.length} capture source${sources.length === 1 ? "" : "s"} found`;
+    writeSettings();
+  } catch (error) {
     const option = document.createElement("option");
-    option.value = source.id;
-    option.textContent = source.name;
-    fragment.appendChild(option);
+    option.value = "";
+    option.textContent = "Source load failed";
+    sourceSelect.replaceChildren(option);
+    sourceMeta.textContent = `Capture source listing failed: ${error.message}`;
+    status.textContent = `Source load failed: ${error.message}`;
+    writeSettings();
   }
-
-  sourceSelect.replaceChildren(fragment);
-  sourceSelect.value = pickPreferredSource(sources);
-
-  const selectedSource = sources.find((source) => source.id === sourceSelect.value);
-  sourceMeta.textContent = selectedSource
-    ? `Selected: ${selectedSource.name}`
-    : "Choose the WoW window or your main monitor before starting capture.";
-
-  writeSettings();
 }
 
 function applyProfilePreset({ keepPosition = true } = {}) {
@@ -313,7 +335,7 @@ applyStoredSettings();
 applyProfilePreset();
 updateMirrorButton();
 
-if (window.simplyMidnightApi) {
+  if (window.simplyMidnightApi) {
   refreshCaptureSources();
   window.simplyMidnightApi.setAlwaysOnTop(alwaysOnTop.checked);
   window.simplyMidnightApi.getMeta().then((meta) => {

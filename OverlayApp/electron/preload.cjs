@@ -1,21 +1,8 @@
-const { contextBridge, ipcRenderer, desktopCapturer } = require("electron");
+const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("simplyMidnightApi", {
-  async listCaptureSources() {
-    const sources = await desktopCapturer.getSources({
-      types: ["window", "screen"],
-      thumbnailSize: {
-        width: 320,
-        height: 180
-      }
-    });
-
-    return sources.map((source) => ({
-      id: source.id,
-      name: source.name,
-      displayId: source.display_id || "",
-      thumbnailDataUrl: source.thumbnail && !source.thumbnail.isEmpty() ? source.thumbnail.toDataURL() : null
-    }));
+  listCaptureSources() {
+    return ipcRenderer.invoke("overlay:list-capture-sources");
   },
   setAlwaysOnTop(value) {
     return ipcRenderer.invoke("overlay:set-always-on-top", value);
