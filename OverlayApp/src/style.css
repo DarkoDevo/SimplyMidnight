@@ -15,6 +15,7 @@ body {
 
 body.mirror-mode {
   background: #010204;
+  overflow: hidden;
 }
 
 #app {

@@ -1,11 +1,6 @@
 const { contextBridge, ipcRenderer } = require("electron");
-const viewModeArg = process.argv.find((arg) => typeof arg === "string" && arg.indexOf("--sm-view=") === 0);
-const viewMode = viewModeArg ? viewModeArg.split("=")[1] : "control";
 
 contextBridge.exposeInMainWorld("simplyMidnightApi", {
-  getViewMode() {
-    return viewMode;
-  },
   listCaptureSources() {
     return ipcRenderer.invoke("overlay:list-capture-sources");
   },

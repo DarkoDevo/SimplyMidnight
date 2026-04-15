@@ -8,17 +8,10 @@ let mirrorWindow = null;
 
 function loadWindow(window, mirrorMode = false) {
   if (isDev) {
-    const url = new URL(process.env.VITE_DEV_SERVER_URL);
-    if (mirrorMode) {
-      url.searchParams.set("mirror", "1");
-    }
-    window.loadURL(url.toString());
+    const baseUrl = process.env.VITE_DEV_SERVER_URL.replace(/\/$/, "");
+    window.loadURL(mirrorMode ? `${baseUrl}/mirror.html` : process.env.VITE_DEV_SERVER_URL);
   } else if (mirrorMode) {
-    window.loadFile(path.join(__dirname, "..", "dist", "index.html"), {
-      query: {
-        mirror: "1"
-      }
-    });
+    window.loadFile(path.join(__dirname, "..", "dist", "mirror.html"));
   } else {
     window.loadFile(path.join(__dirname, "..", "dist", "index.html"));
   }
@@ -37,8 +30,7 @@ function createWindow() {
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
-      nodeIntegration: false,
-      additionalArguments: ["--sm-view=control"]
+      nodeIntegration: false
     }
   });
 
@@ -65,8 +57,7 @@ function ensureMirrorWindow() {
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
-      nodeIntegration: false,
-      additionalArguments: ["--sm-view=mirror"]
+      nodeIntegration: false
     }
   });
   mirrorWindow.setMovable(true);

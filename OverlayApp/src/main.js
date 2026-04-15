@@ -1,17 +1,7 @@
 import "./style.css";
 import { getOverlayProfile, getOverlayProfileKeys } from "./profiles";
 
-const urlState = new URL(window.location.href);
-const preloadViewMode = window.simplyMidnightApi && window.simplyMidnightApi.getViewMode
-  ? window.simplyMidnightApi.getViewMode()
-  : null;
-let isMirrorMode = preloadViewMode === "mirror" || urlState.searchParams.get("mirror") === "1" || urlState.hash === "#mirror";
-
 const app = document.querySelector("#app");
-const mirrorApp = document.querySelector("#mirrorApp");
-const mirrorCanvas = document.querySelector("#mirrorCanvas");
-const mirrorContext = mirrorCanvas.getContext("2d");
-const frameImage = new Image();
 
 const captureButton = document.querySelector("#captureButton");
 const mirrorButton = document.querySelector("#mirrorButton");
@@ -35,17 +25,8 @@ let activeStream = null;
 let frameHandle = null;
 let mirrorEnabled = false;
 let lastMirrorPushAt = 0;
-let controlBooted = false;
-let mirrorBooted = false;
 
 const storageKey = "simplymidnight-overlay-settings";
-
-function applyViewMode() {
-  if (app) app.hidden = isMirrorMode;
-  if (mirrorApp) mirrorApp.hidden = !isMirrorMode;
-  document.body.style.overflow = isMirrorMode ? "hidden" : "";
-  document.body.classList.toggle("mirror-mode", isMirrorMode);
-}
 
 function readSettings() {
   try {
@@ -96,14 +77,6 @@ function populateProfiles() {
   }
   profileSelect.replaceChildren(fragment);
 }
-
-frameImage.addEventListener("load", () => {
-  mirrorCanvas.width = frameImage.width;
-  mirrorCanvas.height = frameImage.height;
-  mirrorContext.imageSmoothingEnabled = false;
-  mirrorContext.clearRect(0, 0, mirrorCanvas.width, mirrorCanvas.height);
-  mirrorContext.drawImage(frameImage, 0, 0);
-});
 
 function pickPreferredSource(sources) {
   const saved = readSettings();
@@ -287,90 +260,59 @@ async function startCapture() {
   }
 }
 
-function bootControlMode() {
-  if (controlBooted) {
-    return;
-  }
-  controlBooted = true;
-
-  captureButton.addEventListener("click", startCapture);
-  refreshSourcesButton.addEventListener("click", async () => {
-    await refreshCaptureSources();
-  });
-  mirrorButton.addEventListener("click", async () => {
-    mirrorEnabled = !mirrorEnabled;
-    updateMirrorButton();
-    writeSettings();
-    if (window.simplyMidnightApi) {
-      await window.simplyMidnightApi.setMirrorEnabled(mirrorEnabled);
-      if (mirrorEnabled) {
-        await updateMirrorBounds();
-      }
-    }
-  });
-
-  alwaysOnTop.addEventListener("change", async () => {
-    writeSettings();
-    if (window.simplyMidnightApi) {
-      await window.simplyMidnightApi.setAlwaysOnTop(alwaysOnTop.checked);
-    }
-  });
-
-  profileSelect.addEventListener("change", () => {
-    applyProfilePreset();
-  });
-
-  sourceSelect.addEventListener("change", () => {
-    const label = sourceSelect.options[sourceSelect.selectedIndex]?.textContent;
-    sourceMeta.textContent = label ? `Selected: ${label}` : "Choose the WoW window or your main monitor before starting capture.";
-    writeSettings();
-  });
-
-  [cropX, cropY, cropW, cropH, scaleInput].forEach((element) => {
-    element.addEventListener("input", () => {
-      updateMirrorBounds();
-      writeSettings();
-    });
-  });
-
-  populateProfiles();
-  applyStoredSettings();
-  applyProfilePreset();
+captureButton.addEventListener("click", startCapture);
+refreshSourcesButton.addEventListener("click", async () => {
+  await refreshCaptureSources();
+});
+mirrorButton.addEventListener("click", async () => {
+  mirrorEnabled = !mirrorEnabled;
   updateMirrorButton();
-
+  writeSettings();
   if (window.simplyMidnightApi) {
-    refreshCaptureSources();
-    window.simplyMidnightApi.setAlwaysOnTop(alwaysOnTop.checked);
-    window.simplyMidnightApi.getMeta().then((meta) => {
-      const profile = getOverlayProfile(profileSelect.value);
-      status.textContent = `Ready | overlay v${meta.version} | ${profile.label}`;
-    });
+    await window.simplyMidnightApi.setMirrorEnabled(mirrorEnabled);
     if (mirrorEnabled) {
-      window.simplyMidnightApi.setMirrorEnabled(true).then(() => updateMirrorBounds());
+      await updateMirrorBounds();
     }
   }
-}
+});
 
-function bootMirrorMode() {
-  if (mirrorBooted) {
-    return;
-  }
-  mirrorBooted = true;
-
+alwaysOnTop.addEventListener("change", async () => {
+  writeSettings();
   if (window.simplyMidnightApi) {
-    window.simplyMidnightApi.onMirrorFrame((payload) => {
-      if (!payload || !payload.dataUrl) {
-        return;
-      }
-      frameImage.src = payload.dataUrl;
-    });
+    await window.simplyMidnightApi.setAlwaysOnTop(alwaysOnTop.checked);
   }
-}
+});
 
-applyViewMode();
+profileSelect.addEventListener("change", () => {
+  applyProfilePreset();
+});
 
-if (isMirrorMode) {
-  bootMirrorMode();
-} else {
-  bootControlMode();
+sourceSelect.addEventListener("change", () => {
+  const label = sourceSelect.options[sourceSelect.selectedIndex]?.textContent;
+  sourceMeta.textContent = label ? `Selected: ${label}` : "Choose the WoW window or your main monitor before starting capture.";
+  writeSettings();
+});
+
+[cropX, cropY, cropW, cropH, scaleInput].forEach((element) => {
+  element.addEventListener("input", () => {
+    updateMirrorBounds();
+    writeSettings();
+  });
+});
+
+populateProfiles();
+applyStoredSettings();
+applyProfilePreset();
+updateMirrorButton();
+
+if (window.simplyMidnightApi) {
+  refreshCaptureSources();
+  window.simplyMidnightApi.setAlwaysOnTop(alwaysOnTop.checked);
+  window.simplyMidnightApi.getMeta().then((meta) => {
+    const profile = getOverlayProfile(profileSelect.value);
+    status.textContent = `Ready | overlay v${meta.version} | ${profile.label}`;
+  });
+  if (mirrorEnabled) {
+    window.simplyMidnightApi.setMirrorEnabled(true).then(() => updateMirrorBounds());
+  }
 }
