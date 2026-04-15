@@ -25,6 +25,15 @@ contextBridge.exposeInMainWorld("simplyMidnightApi", {
     ipcRenderer.on("overlay:mirror-frame", listener);
     return () => ipcRenderer.removeListener("overlay:mirror-frame", listener);
   },
+  onViewMode(callback) {
+    if (typeof callback !== "function") {
+      return () => {};
+    }
+
+    const listener = (_, payload) => callback(payload);
+    ipcRenderer.on("overlay:view-mode", listener);
+    return () => ipcRenderer.removeListener("overlay:view-mode", listener);
+  },
   getMeta() {
     return ipcRenderer.invoke("overlay:get-meta");
   }

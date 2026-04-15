@@ -2,35 +2,14 @@ import "./style.css";
 import { getOverlayProfile, getOverlayProfileKeys } from "./profiles";
 
 const urlState = new URL(window.location.href);
-const isMirrorMode = urlState.searchParams.get("mirror") === "1" || urlState.hash === "#mirror";
+let isMirrorMode = urlState.searchParams.get("mirror") === "1" || urlState.hash === "#mirror";
 
-if (isMirrorMode) {
-  const app = document.querySelector("#app");
-  const mirrorApp = document.querySelector("#mirrorApp");
-  const mirrorCanvas = document.querySelector("#mirrorCanvas");
-  const mirrorContext = mirrorCanvas.getContext("2d");
-  const frameImage = new Image();
+const app = document.querySelector("#app");
+const mirrorApp = document.querySelector("#mirrorApp");
+const mirrorCanvas = document.querySelector("#mirrorCanvas");
+const mirrorContext = mirrorCanvas.getContext("2d");
+const frameImage = new Image();
 
-  if (app) app.hidden = true;
-  if (mirrorApp) mirrorApp.hidden = false;
-
-  frameImage.addEventListener("load", () => {
-    mirrorCanvas.width = frameImage.width;
-    mirrorCanvas.height = frameImage.height;
-    mirrorContext.imageSmoothingEnabled = false;
-    mirrorContext.clearRect(0, 0, mirrorCanvas.width, mirrorCanvas.height);
-    mirrorContext.drawImage(frameImage, 0, 0);
-  });
-
-  if (window.simplyMidnightApi) {
-    window.simplyMidnightApi.onMirrorFrame((payload) => {
-      if (!payload || !payload.dataUrl) {
-        return;
-      }
-      frameImage.src = payload.dataUrl;
-    });
-  }
-} else {
 const captureButton = document.querySelector("#captureButton");
 const mirrorButton = document.querySelector("#mirrorButton");
 const alwaysOnTop = document.querySelector("#alwaysOnTop");
@@ -53,8 +32,16 @@ let activeStream = null;
 let frameHandle = null;
 let mirrorEnabled = false;
 let lastMirrorPushAt = 0;
+let controlBooted = false;
+let mirrorBooted = false;
 
 const storageKey = "simplymidnight-overlay-settings";
+
+function applyViewMode() {
+  if (app) app.hidden = isMirrorMode;
+  if (mirrorApp) mirrorApp.hidden = !isMirrorMode;
+  document.body.style.overflow = isMirrorMode ? "hidden" : "";
+}
 
 function readSettings() {
   try {
@@ -105,6 +92,14 @@ function populateProfiles() {
   }
   profileSelect.replaceChildren(fragment);
 }
+
+frameImage.addEventListener("load", () => {
+  mirrorCanvas.width = frameImage.width;
+  mirrorCanvas.height = frameImage.height;
+  mirrorContext.imageSmoothingEnabled = false;
+  mirrorContext.clearRect(0, 0, mirrorCanvas.width, mirrorCanvas.height);
+  mirrorContext.drawImage(frameImage, 0, 0);
+});
 
 function pickPreferredSource(sources) {
   const saved = readSettings();
@@ -288,62 +283,107 @@ async function startCapture() {
   }
 }
 
-captureButton.addEventListener("click", startCapture);
-refreshSourcesButton.addEventListener("click", async () => {
-  await refreshCaptureSources();
-});
-mirrorButton.addEventListener("click", async () => {
-  mirrorEnabled = !mirrorEnabled;
-  updateMirrorButton();
-  writeSettings();
-  if (window.simplyMidnightApi) {
-    await window.simplyMidnightApi.setMirrorEnabled(mirrorEnabled);
-    if (mirrorEnabled) {
-      await updateMirrorBounds();
+function bootControlMode() {
+  if (controlBooted) {
+    return;
+  }
+  controlBooted = true;
+
+  captureButton.addEventListener("click", startCapture);
+  refreshSourcesButton.addEventListener("click", async () => {
+    await refreshCaptureSources();
+  });
+  mirrorButton.addEventListener("click", async () => {
+    mirrorEnabled = !mirrorEnabled;
+    updateMirrorButton();
+    writeSettings();
+    if (window.simplyMidnightApi) {
+      await window.simplyMidnightApi.setMirrorEnabled(mirrorEnabled);
+      if (mirrorEnabled) {
+        await updateMirrorBounds();
+      }
     }
-  }
-});
+  });
 
-alwaysOnTop.addEventListener("change", async () => {
-  writeSettings();
-  if (window.simplyMidnightApi) {
-    await window.simplyMidnightApi.setAlwaysOnTop(alwaysOnTop.checked);
-  }
-});
+  alwaysOnTop.addEventListener("change", async () => {
+    writeSettings();
+    if (window.simplyMidnightApi) {
+      await window.simplyMidnightApi.setAlwaysOnTop(alwaysOnTop.checked);
+    }
+  });
 
-[profileSelect].forEach((element) => {
-  element.addEventListener("change", () => {
+  profileSelect.addEventListener("change", () => {
     applyProfilePreset();
   });
-});
 
-sourceSelect.addEventListener("change", () => {
-  const label = sourceSelect.options[sourceSelect.selectedIndex]?.textContent;
-  sourceMeta.textContent = label ? `Selected: ${label}` : "Choose the WoW window or your main monitor before starting capture.";
-  writeSettings();
-});
-
-[cropX, cropY, cropW, cropH, scaleInput].forEach((element) => {
-  element.addEventListener("input", () => {
-    updateMirrorBounds();
+  sourceSelect.addEventListener("change", () => {
+    const label = sourceSelect.options[sourceSelect.selectedIndex]?.textContent;
+    sourceMeta.textContent = label ? `Selected: ${label}` : "Choose the WoW window or your main monitor before starting capture.";
     writeSettings();
   });
-});
 
-populateProfiles();
-applyStoredSettings();
-applyProfilePreset();
-updateMirrorButton();
+  [cropX, cropY, cropW, cropH, scaleInput].forEach((element) => {
+    element.addEventListener("input", () => {
+      updateMirrorBounds();
+      writeSettings();
+    });
+  });
+
+  populateProfiles();
+  applyStoredSettings();
+  applyProfilePreset();
+  updateMirrorButton();
 
   if (window.simplyMidnightApi) {
-  refreshCaptureSources();
-  window.simplyMidnightApi.setAlwaysOnTop(alwaysOnTop.checked);
-  window.simplyMidnightApi.getMeta().then((meta) => {
-    const profile = getOverlayProfile(profileSelect.value);
-    status.textContent = `Ready | overlay v${meta.version} | ${profile.label}`;
-  });
-  if (mirrorEnabled) {
-    window.simplyMidnightApi.setMirrorEnabled(true).then(() => updateMirrorBounds());
+    refreshCaptureSources();
+    window.simplyMidnightApi.setAlwaysOnTop(alwaysOnTop.checked);
+    window.simplyMidnightApi.getMeta().then((meta) => {
+      const profile = getOverlayProfile(profileSelect.value);
+      status.textContent = `Ready | overlay v${meta.version} | ${profile.label}`;
+    });
+    if (mirrorEnabled) {
+      window.simplyMidnightApi.setMirrorEnabled(true).then(() => updateMirrorBounds());
+    }
   }
 }
+
+function bootMirrorMode() {
+  if (mirrorBooted) {
+    return;
+  }
+  mirrorBooted = true;
+
+  if (window.simplyMidnightApi) {
+    window.simplyMidnightApi.onMirrorFrame((payload) => {
+      if (!payload || !payload.dataUrl) {
+        return;
+      }
+      frameImage.src = payload.dataUrl;
+    });
+  }
+}
+
+applyViewMode();
+
+if (window.simplyMidnightApi && window.simplyMidnightApi.onViewMode) {
+  window.simplyMidnightApi.onViewMode((payload) => {
+    const nextMirrorMode = Boolean(payload && payload.mirror);
+    if (nextMirrorMode === isMirrorMode) {
+      return;
+    }
+
+    isMirrorMode = nextMirrorMode;
+    applyViewMode();
+    if (isMirrorMode) {
+      bootMirrorMode();
+    } else {
+      bootControlMode();
+    }
+  });
+}
+
+if (isMirrorMode) {
+  bootMirrorMode();
+} else {
+  bootControlMode();
 }

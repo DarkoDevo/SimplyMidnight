@@ -22,6 +22,12 @@ function loadWindow(window, mirrorMode = false) {
   } else {
     window.loadFile(path.join(__dirname, "..", "dist", "index.html"));
   }
+
+  window.webContents.once("did-finish-load", () => {
+    window.webContents.send("overlay:view-mode", {
+      mirror: Boolean(mirrorMode)
+    });
+  });
 }
 
 function createWindow() {
