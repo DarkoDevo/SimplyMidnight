@@ -44,6 +44,17 @@ body {
   margin-bottom: 18px;
 }
 
+.presetRow {
+  margin-bottom: 18px;
+}
+
+.profileMeta {
+  margin-top: 8px;
+  color: #a9bddf;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 .grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -68,11 +79,13 @@ label {
 }
 
 input,
+select,
 button {
   font: inherit;
 }
 
-input[type="number"] {
+input[type="number"],
+select {
   padding: 8px 10px;
   border: 1px solid rgba(126, 200, 255, 0.22);
   background: rgba(16, 24, 36, 0.85);

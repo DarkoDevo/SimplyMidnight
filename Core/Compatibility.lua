@@ -53,11 +53,15 @@ end
 
 function Compatibility:GetExportSnapshot()
     local hud = addon.db and addon.db.hud or addon.defaults.hud
+    local profile = addon.OutputProfiles and addon.OutputProfiles:GetContract(hud.profile) or nil
 
     return {
         protocolVersion = "sm-export-v1",
         publicTable = "_G.SimplyMidnightBridge",
-        surfaceMode = "pixel-hud",
+        profileVersion = "sm-layout-v1",
+        profileKey = profile and profile.key or tostring(hud.profile or "debug_hud"),
+        profileLabel = profile and profile.label or "Debug HUD",
+        surfaceMode = profile and profile.surfaceMode or "pixel-hud",
         directHUD = true,
         overlayMirror = true,
         point = hud.point,
@@ -67,7 +71,12 @@ function Compatibility:GetExportSnapshot()
         scale = hud.scale,
         visible = hud.visible ~= false,
         locked = hud.locked ~= false,
+        width = profile and profile.frame and profile.frame.width or 0,
+        height = profile and profile.frame and profile.frame.height or 0,
         slots = addon:GetSlotOrder(),
+        transport = profile and profile.transport or nil,
+        overlay = profile and profile.overlay or nil,
+        availableProfiles = addon.OutputProfiles and addon.OutputProfiles:GetContracts() or {},
     }
 end
 

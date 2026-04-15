@@ -22,6 +22,14 @@
           </label>
         </div>
 
+        <div class="presetRow">
+          <label>
+            Export Profile
+            <select id="profileSelect"></select>
+          </label>
+          <div id="profileMeta" class="profileMeta">Preset controls the recommended crop size and preview scale.</div>
+        </div>
+
         <div class="grid">
           <label>X <input id="cropX" type="number" value="0" /></label>
           <label>Y <input id="cropY" type="number" value="0" /></label>
@@ -32,6 +40,7 @@
 
         <div class="notes">
           <p>1. Start the addon in WoW and unlock the HUD if you need to move it.</p>
+          <p>1a. In WoW, use <strong>/sm export ggl_legacy_5slot</strong> or another named profile so the addon and overlay are aiming at the same contract.</p>
           <p>2. Click <strong>Start Capture</strong> and pick the WoW window or monitor.</p>
           <p>3. Adjust crop values until the mirrored export strip fills the preview.</p>
           <p>4. Transparent click-through overlay mode is reserved for a later phase.</p>
@@ -47,4 +56,3 @@
     </div>
   </body>
 </html>
-

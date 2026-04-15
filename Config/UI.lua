@@ -394,6 +394,23 @@ function ConfigUI:Initialize()
         self:Refresh()
     end)
 
+    self.exportProfileButton = CreateFrame("Button", nil, self.frame, "UIPanelButtonTemplate")
+    self.exportProfileButton:SetSize(132, 22)
+    self.exportProfileButton:SetPoint("RIGHT", self.resetButton, "LEFT", -8, 0)
+    self.exportProfileButton:SetScript("OnClick", function()
+        local nextKey = addon.OutputProfiles and addon.OutputProfiles:GetNextKey(addon:GetExportProfileKey()) or nil
+        if not nextKey then
+            return
+        end
+
+        local ok, value = addon:SetExportProfile(nextKey)
+        if ok then
+            local contract = addon.OutputProfiles and addon.OutputProfiles:GetContract(value) or nil
+            addon:Print("Export profile: " .. tostring(contract and contract.label or value))
+            self:Refresh()
+        end
+    end)
+
     self.closeButton = CreateFrame("Button", nil, self.frame, "UIPanelCloseButton")
     self.closeButton:SetPoint("TOPRIGHT", -4, -4)
 
@@ -735,6 +752,11 @@ end
 function ConfigUI:Refresh()
     if not self.frame then
         return
+    end
+
+    if self.exportProfileButton and addon.OutputProfiles then
+        local contract = addon.OutputProfiles:GetContract(addon:GetExportProfileKey())
+        self.exportProfileButton:SetText("Export: " .. tostring(contract and contract.shortLabel or "Debug"))
     end
 
     self:EnsureSelection()

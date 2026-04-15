@@ -1,7 +1,10 @@
 import "./style.css";
+import { getOverlayProfile, getOverlayProfileKeys } from "./profiles";
 
 const captureButton = document.querySelector("#captureButton");
 const alwaysOnTop = document.querySelector("#alwaysOnTop");
+const profileSelect = document.querySelector("#profileSelect");
+const profileMeta = document.querySelector("#profileMeta");
 const cropX = document.querySelector("#cropX");
 const cropY = document.querySelector("#cropY");
 const cropW = document.querySelector("#cropW");
@@ -29,6 +32,7 @@ function writeSettings() {
   localStorage.setItem(
     storageKey,
     JSON.stringify({
+      profile: profileSelect.value,
       cropX: cropX.value,
       cropY: cropY.value,
       cropW: cropW.value,
@@ -41,12 +45,38 @@ function writeSettings() {
 
 function applyStoredSettings() {
   const saved = readSettings();
+  if (saved.profile != null) profileSelect.value = saved.profile;
   if (saved.cropX != null) cropX.value = saved.cropX;
   if (saved.cropY != null) cropY.value = saved.cropY;
   if (saved.cropW != null) cropW.value = saved.cropW;
   if (saved.cropH != null) cropH.value = saved.cropH;
   if (saved.scale != null) scaleInput.value = saved.scale;
   if (saved.alwaysOnTop != null) alwaysOnTop.checked = saved.alwaysOnTop;
+}
+
+function populateProfiles() {
+  const fragment = document.createDocumentFragment();
+  for (const key of getOverlayProfileKeys()) {
+    const profile = getOverlayProfile(key);
+    const option = document.createElement("option");
+    option.value = profile.key;
+    option.textContent = profile.label;
+    fragment.appendChild(option);
+  }
+  profileSelect.replaceChildren(fragment);
+}
+
+function applyProfilePreset({ keepPosition = true } = {}) {
+  const profile = getOverlayProfile(profileSelect.value);
+  if (!keepPosition) {
+    cropX.value = "0";
+    cropY.value = "0";
+  }
+  cropW.value = String(profile.cropW);
+  cropH.value = String(profile.cropH);
+  scaleInput.value = String(profile.scale);
+  profileMeta.textContent = `${profile.description} | ${profile.cropW}x${profile.cropH} @ ${profile.scale}x`;
+  writeSettings();
 }
 
 function stopLoop() {
@@ -118,18 +148,26 @@ alwaysOnTop.addEventListener("change", async () => {
   }
 });
 
+[profileSelect].forEach((element) => {
+  element.addEventListener("change", () => {
+    applyProfilePreset();
+  });
+});
+
 [cropX, cropY, cropW, cropH, scaleInput].forEach((element) => {
   element.addEventListener("input", () => {
     writeSettings();
   });
 });
 
+populateProfiles();
 applyStoredSettings();
+applyProfilePreset();
 
 if (window.simplyMidnightApi) {
   window.simplyMidnightApi.setAlwaysOnTop(alwaysOnTop.checked);
   window.simplyMidnightApi.getMeta().then((meta) => {
-    status.textContent = `Ready | overlay v${meta.version}`;
+    const profile = getOverlayProfile(profileSelect.value);
+    status.textContent = `Ready | overlay v${meta.version} | ${profile.label}`;
   });
 }
-

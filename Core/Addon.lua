@@ -491,6 +491,40 @@ function addon:GetSlotOrder()
     return self.constants.slotOrder
 end
 
+function addon:GetExportProfileKey()
+    if self.OutputProfiles and self.OutputProfiles.GetActiveKey then
+        return self.OutputProfiles:GetActiveKey()
+    end
+    return tostring(self.db and self.db.hud and self.db.hud.profile or self.defaults.hud.profile or "debug_hud")
+end
+
+function addon:GetExportProfile()
+    if self.OutputProfiles and self.OutputProfiles.GetActive then
+        return self.OutputProfiles:GetActive()
+    end
+    return nil
+end
+
+function addon:SetExportProfile(profileKey)
+    if not (self.db and self.db.hud and self.OutputProfiles and self.OutputProfiles.IsValid) then
+        return false, "Export profiles unavailable"
+    end
+
+    local normalized = self.OutputProfiles.MatchKey and self.OutputProfiles:MatchKey(profileKey) or nil
+    if not normalized or not self.OutputProfiles:IsValid(normalized) then
+        return false, "Unknown export profile"
+    end
+
+    self.db.hud.profile = normalized
+
+    if self.ExportHUD and self.ExportHUD.ApplyActiveProfile then
+        self.ExportHUD:ApplyActiveProfile()
+    end
+
+    self:NotifyCompatibilityChanged()
+    return true, normalized
+end
+
 function addon:GetSpellTexture(spellID)
     if type(C_Spell) == "table" and type(C_Spell.GetSpellTexture) == "function" then
         local ok, texture = pcall(C_Spell.GetSpellTexture, spellID)

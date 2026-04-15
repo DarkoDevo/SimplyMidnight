@@ -3,6 +3,7 @@ local _, addon = ...
 local ExportHUD = {
     iconFrames = {},
     stateCells = {},
+    bars = {},
 }
 
 local function createBackdropFrame(name, parent)
@@ -29,6 +30,10 @@ local function colorFromSpellID(spellID)
 end
 
 local function setBar(texture, valuePct)
+    if not texture then
+        return
+    end
+
     valuePct = math.max(0, math.min(valuePct or 0, 100))
     texture:SetWidth((texture.__maxWidth or 1) * (valuePct / 100))
 end
@@ -148,69 +153,60 @@ function ExportHUD:ToggleLocked()
     self:SetLocked(not addon.db.hud.locked)
 end
 
-function ExportHUD:CreateIcon(slot, index)
+function ExportHUD:CreateIcon(slot)
     local iconFrame = createBackdropFrame(nil, self.frame)
-    iconFrame:SetSize(42, 42)
-    iconFrame:SetPoint("TOPLEFT", self.frame, "TOPLEFT", 10 + ((index - 1) * 48), -20)
 
     iconFrame.texture = iconFrame:CreateTexture(nil, "ARTWORK")
     iconFrame.texture:SetAllPoints()
     iconFrame.texture:SetTexCoord(0.08, 0.92, 0.08, 0.92)
 
     iconFrame.checksum = iconFrame:CreateTexture(nil, "OVERLAY")
-    iconFrame.checksum:SetSize(8, 8)
     iconFrame.checksum:SetPoint("BOTTOMRIGHT", -2, 2)
 
     iconFrame.label = iconFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    iconFrame.label:SetPoint("BOTTOM", iconFrame, "TOP", 0, 2)
     iconFrame.label:SetText(slot)
 
     self.iconFrames[slot] = iconFrame
 end
 
-function ExportHUD:CreateStateCell(key, index)
+function ExportHUD:CreateStateCell(key)
     local cell = self.frame:CreateTexture(nil, "OVERLAY")
-    cell:SetSize(10, 10)
-    cell:SetPoint("TOPLEFT", self.frame, "TOPLEFT", 268 + ((index - 1) * 14), -28)
-    self.stateCells[key] = cell
-
     local label = self.frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    label:SetPoint("TOP", cell, "BOTTOM", 0, -2)
     label:SetText(string.sub(key, 1, 1):upper())
+
+    self.stateCells[key] = {
+        texture = cell,
+        label = label,
+    }
 end
 
-function ExportHUD:CreateBar(labelText, yOffset, color)
+function ExportHUD:CreateBar(labelText, color)
     local label = self.frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    label:SetPoint("TOPLEFT", self.frame, "TOPLEFT", 10, yOffset)
     label:SetText(labelText)
 
     local holder = createBackdropFrame(nil, self.frame)
-    holder:SetSize(180, 12)
-    holder:SetPoint("TOPLEFT", self.frame, "TOPLEFT", 70, yOffset + 2)
-
     local fill = holder:CreateTexture(nil, "ARTWORK")
     fill:SetPoint("LEFT", holder, "LEFT", 2, 0)
-    fill:SetHeight(8)
-    fill.__maxWidth = 176
     fill:SetTexture("Interface/Buttons/WHITE8X8")
     fill:SetVertexColor(color[1], color[2], color[3], 0.95)
 
-    return fill
+    return {
+        label = label,
+        holder = holder,
+        fill = fill,
+        defaultLabel = labelText,
+    }
 end
 
 function ExportHUD:CreateDebugPanel()
     self.debugPanel = createBackdropFrame(nil, self.frame)
-    self.debugPanel:SetPoint("TOPLEFT", self.frame, "BOTTOMLEFT", 0, -6)
-    self.debugPanel:SetSize(472, 156)
     self.debugPanel:Hide()
 
     self.debugLines = {}
     for index = 1, 8 do
         local line = self.debugPanel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        line:SetPoint("TOPLEFT", self.debugPanel, "TOPLEFT", 12, -10 - ((index - 1) * 18))
         line:SetJustifyH("LEFT")
         line:SetWordWrap(false)
-        line:SetWidth(448)
         self.debugLines[index] = line
     end
 end
@@ -300,13 +296,143 @@ function ExportHUD:GetDiagnosticLines(state, recommendations)
     }
 end
 
+function ExportHUD:ApplyActiveProfile()
+    if not self.frame then
+        return
+    end
+
+    local profile = addon:GetExportProfile() or addon.OutputProfiles:GetActive()
+    local frameLayout = profile.frame or {}
+    local iconLayout = profile.icons or {}
+    local stateLayout = profile.stateCells or {}
+    local barLayout = profile.bars or {}
+    local signatureLayout = profile.signature or {}
+    local heartbeatLayout = profile.heartbeat or {}
+    local debugLayout = profile.debugPanel or {}
+
+    self.activeProfile = profile
+    self.frame:SetSize(frameLayout.width or 390, frameLayout.height or 132)
+    self:ApplyPosition()
+    self.frame:SetShown(addon.db.hud.visible ~= false)
+
+    self.signatureA:SetSize(signatureLayout.size or 8, signatureLayout.size or 8)
+    self.signatureA:ClearAllPoints()
+    self.signatureA:SetPoint("TOPLEFT", signatureLayout.x or 4, signatureLayout.y or -4)
+    self.signatureA:SetTexture("Interface/Buttons/WHITE8X8")
+    self.signatureA:SetVertexColor(1, 0, 1, 1)
+
+    self.signatureB:SetSize(signatureLayout.size or 8, signatureLayout.size or 8)
+    self.signatureB:ClearAllPoints()
+    self.signatureB:SetPoint("LEFT", self.signatureA, "RIGHT", signatureLayout.gap or 2, 0)
+    self.signatureB:SetTexture("Interface/Buttons/WHITE8X8")
+    self.signatureB:SetVertexColor(0, 1, 1, 1)
+
+    self.heartbeat:SetSize(heartbeatLayout.size or 10, heartbeatLayout.size or 10)
+    self.heartbeat:ClearAllPoints()
+    self.heartbeat:SetPoint("TOPRIGHT", heartbeatLayout.x or -6, heartbeatLayout.y or -6)
+    self.heartbeat:SetTexture("Interface/Buttons/WHITE8X8")
+
+    self.dragHint:ClearAllPoints()
+    self.dragHint:SetPoint("TOP", self.frame, "TOP", 0, -6)
+    self.dragHint:SetText("drag /sm hud lock")
+
+    for index, slot in ipairs(addon:GetSlotOrder()) do
+        local iconFrame = self.iconFrames[slot]
+        local size = iconLayout.size or 42
+        iconFrame:SetSize(size, size)
+        iconFrame:ClearAllPoints()
+        iconFrame:SetPoint("TOPLEFT", self.frame, "TOPLEFT", (iconLayout.startX or 10) + ((index - 1) * (iconLayout.stepX or (size + 4))), -(iconLayout.startY or 20))
+        iconFrame.checksum:SetSize(iconLayout.checksumSize or 8, iconLayout.checksumSize or 8)
+        iconFrame.checksum:ClearAllPoints()
+        iconFrame.checksum:SetPoint("BOTTOMRIGHT", iconLayout.checksumInsetX or -2, iconLayout.checksumInsetY or 2)
+
+        iconFrame.label:ClearAllPoints()
+        iconFrame.label:SetPoint("BOTTOM", iconFrame, "TOP", 0, 2)
+        iconFrame.label:SetText(slot)
+        iconFrame.label:SetShown(iconLayout.showLabels ~= false)
+    end
+
+    local visibleStateKeys = {}
+    if stateLayout.visible then
+        for index, key in ipairs(stateLayout.order or {}) do
+            local cell = self.stateCells[key]
+            if cell then
+                visibleStateKeys[key] = true
+                cell.texture:SetSize(stateLayout.size or 10, stateLayout.size or 10)
+                cell.texture:ClearAllPoints()
+                cell.texture:SetPoint("TOPLEFT", self.frame, "TOPLEFT", (stateLayout.startX or 268) + ((index - 1) * (stateLayout.stepX or 14)), -(stateLayout.startY or 28))
+                cell.texture:Show()
+
+                cell.label:ClearAllPoints()
+                cell.label:SetPoint("TOP", cell.texture, "BOTTOM", 0, stateLayout.labelOffsetY or -2)
+                cell.label:SetText(string.sub(key, 1, 1):upper())
+                cell.label:Show()
+            end
+        end
+    end
+
+    for key, cell in pairs(self.stateCells) do
+        if not visibleStateKeys[key] then
+            cell.texture:Hide()
+            cell.label:Hide()
+        end
+    end
+
+    local barOrder = { "player", "target", "resource" }
+    if barLayout.visible then
+        for index, key in ipairs(barOrder) do
+            local bar = self.bars[key]
+            if bar then
+                local y = (barLayout.topY or -78) + ((index - 1) * (barLayout.gapY or -18))
+                bar.label:ClearAllPoints()
+                bar.label:SetPoint("TOPLEFT", self.frame, "TOPLEFT", barLayout.labelX or 10, y)
+                bar.label:SetShown(barLayout.showLabels ~= false)
+
+                bar.holder:ClearAllPoints()
+                bar.holder:SetPoint("TOPLEFT", self.frame, "TOPLEFT", barLayout.fillX or 70, y + 2)
+                bar.holder:SetSize(barLayout.width or 180, barLayout.height or 12)
+                bar.holder:Show()
+
+                bar.fill:ClearAllPoints()
+                bar.fill:SetPoint("LEFT", bar.holder, "LEFT", barLayout.fillInset or 2, 0)
+                bar.fill:SetHeight(barLayout.fillHeight or 8)
+                bar.fill.__maxWidth = math.max((barLayout.width or 180) - ((barLayout.fillInset or 2) * 2), 1)
+            end
+        end
+    else
+        for _, key in ipairs(barOrder) do
+            local bar = self.bars[key]
+            if bar then
+                bar.label:Hide()
+                bar.holder:Hide()
+            end
+        end
+    end
+
+    if barLayout.visible then
+        self.bars.player.label:Show()
+        self.bars.target.label:Show()
+        self.bars.resource.label:Show()
+    end
+
+    self.debugPanel:ClearAllPoints()
+    self.debugPanel:SetPoint("TOPLEFT", self.frame, "BOTTOMLEFT", 0, debugLayout.yOffset or -6)
+    self.debugPanel:SetSize(debugLayout.width or math.max(frameLayout.width or 390, 472), debugLayout.height or 156)
+    for index, line in ipairs(self.debugLines) do
+        line:ClearAllPoints()
+        line:SetPoint("TOPLEFT", self.debugPanel, "TOPLEFT", 12, -10 - ((index - 1) * 18))
+        line:SetWidth((debugLayout.width or math.max(frameLayout.width or 390, 472)) - 24)
+    end
+
+    addon:NotifyCompatibilityChanged()
+end
+
 function ExportHUD:Initialize()
     if self.frame then
         return
     end
 
     self.frame = createBackdropFrame("SimplyMidnightExportFrame", UIParent)
-    self.frame:SetSize(390, 132)
     self.frame:SetClampedToScreen(true)
     self.frame:SetMovable(true)
     self.frame:RegisterForDrag("LeftButton")
@@ -322,44 +448,27 @@ function ExportHUD:Initialize()
     end)
 
     self.signatureA = self.frame:CreateTexture(nil, "OVERLAY")
-    self.signatureA:SetSize(8, 8)
-    self.signatureA:SetPoint("TOPLEFT", 4, -4)
-    self.signatureA:SetTexture("Interface/Buttons/WHITE8X8")
-    self.signatureA:SetVertexColor(1, 0, 1, 1)
-
     self.signatureB = self.frame:CreateTexture(nil, "OVERLAY")
-    self.signatureB:SetSize(8, 8)
-    self.signatureB:SetPoint("LEFT", self.signatureA, "RIGHT", 2, 0)
-    self.signatureB:SetTexture("Interface/Buttons/WHITE8X8")
-    self.signatureB:SetVertexColor(0, 1, 1, 1)
-
     self.heartbeat = self.frame:CreateTexture(nil, "OVERLAY")
-    self.heartbeat:SetSize(10, 10)
-    self.heartbeat:SetPoint("TOPRIGHT", -6, -6)
-    self.heartbeat:SetTexture("Interface/Buttons/WHITE8X8")
 
     self.dragHint = self.frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    self.dragHint:SetPoint("TOP", self.frame, "TOP", 0, -6)
-    self.dragHint:SetText("drag /sm hud lock")
 
-    for index, slot in ipairs(addon:GetSlotOrder()) do
-        self:CreateIcon(slot, index)
+    for _, slot in ipairs(addon:GetSlotOrder()) do
+        self:CreateIcon(slot)
     end
 
-    local stateOrder = { "burst", "conserve", "hold", "pause", "target", "range", "cast", "overlay" }
-    for index, key in ipairs(stateOrder) do
-        self:CreateStateCell(key, index)
+    for _, key in ipairs({ "burst", "conserve", "hold", "pause", "target", "range", "cast", "overlay" }) do
+        self:CreateStateCell(key)
     end
 
-    self.playerBar = self:CreateBar("HP", -78, { 0.15, 0.95, 0.25 })
-    self.targetBar = self:CreateBar("TGT", -96, { 0.95, 0.25, 0.25 })
-    self.resourceBar = self:CreateBar("PWR", -114, { 0.25, 0.65, 1.0 })
+    self.bars.player = self:CreateBar("HP", { 0.15, 0.95, 0.25 })
+    self.bars.target = self:CreateBar("TGT", { 0.95, 0.25, 0.25 })
+    self.bars.resource = self:CreateBar("PWR", { 0.25, 0.65, 1.0 })
 
     self:CreateDebugPanel()
 
-    self:ApplyPosition()
     self:SetLocked(addon.db.hud.locked)
-    self.frame:SetShown(addon.db.hud.visible ~= false)
+    self:ApplyActiveProfile()
 end
 
 function ExportHUD:RenderStateCell(key, active, activeColor, inactiveColor)
@@ -368,11 +477,11 @@ function ExportHUD:RenderStateCell(key, active, activeColor, inactiveColor)
         return
     end
 
-    cell:SetTexture("Interface/Buttons/WHITE8X8")
+    cell.texture:SetTexture("Interface/Buttons/WHITE8X8")
     if active then
-        cell:SetVertexColor(activeColor[1], activeColor[2], activeColor[3], 1)
+        cell.texture:SetVertexColor(activeColor[1], activeColor[2], activeColor[3], 1)
     else
-        cell:SetVertexColor(inactiveColor[1], inactiveColor[2], inactiveColor[3], 0.35)
+        cell.texture:SetVertexColor(inactiveColor[1], inactiveColor[2], inactiveColor[3], 0.35)
     end
 end
 
@@ -414,9 +523,16 @@ function ExportHUD:Render(state, recommendations)
     self:RenderStateCell("cast", state.target.casting and state.target.interruptible, { 0.85, 0.2, 1.0 }, { 0.15, 0.1, 0.2 })
     self:RenderStateCell("overlay", state.modes.overlay, { 0.35, 1.0, 0.95 }, { 0.1, 0.2, 0.2 })
 
-    setBar(self.playerBar, state.player.healthKnown and state.player.healthPct or 0)
-    setBar(self.targetBar, state.target.healthKnown and state.target.healthPct or 0)
-    setBar(self.resourceBar, state.player.primaryPctKnown and state.player.primaryPct or 0)
+    if self.bars.player then
+        setBar(self.bars.player.fill, state.player.healthKnown and state.player.healthPct or 0)
+    end
+    if self.bars.target then
+        setBar(self.bars.target.fill, state.target.healthKnown and state.target.healthPct or 0)
+    end
+    if self.bars.resource then
+        self.bars.resource.label:SetText(string.upper(state.player.primaryResourceShortLabel or self.bars.resource.defaultLabel or "PWR"))
+        setBar(self.bars.resource.fill, state.player.primaryPctKnown and state.player.primaryPct or 0)
+    end
 
     if addon.session.debug then
         local lines = self:GetDiagnosticLines(state, recommendations)

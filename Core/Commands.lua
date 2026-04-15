@@ -17,8 +17,19 @@ end
 local function printHelp()
     addon:Print("Commands: /sm help | /sm config | /sm burst [seconds] | /sm hold [seconds]")
     addon:Print("/sm conserve on|off|toggle | /sm pause on|off|toggle | /sm debug on|off")
-    addon:Print("/sm overlay on|off | /sm hud lock|unlock | /sm add <spellID> [slot] [priority] | /sm list")
+    addon:Print("/sm overlay on|off | /sm export [profile|list] | /sm hud lock|unlock")
+    addon:Print("/sm add <spellID> [slot] [priority] | /sm list")
     addon:Print("/sm defaults | /sm reset | /sm compat | /sm diag")
+end
+
+local function printExportProfiles()
+    local activeKey = addon:GetExportProfileKey()
+    addon:Print("Export profiles:")
+    for _, key in ipairs(addon.OutputProfiles and addon.OutputProfiles:GetKeys() or {}) do
+        local contract = addon.OutputProfiles:GetContract(key)
+        local marker = key == activeKey and "*" or "-"
+        addon:Print(string.format("%s %s | %s | %dx%d", marker, contract.key, tostring(contract.label), tonumber(contract.frame.width) or 0, tonumber(contract.frame.height) or 0))
+    end
 end
 
 local function printRegistry()
@@ -255,6 +266,28 @@ function Commands:Initialize()
             local nextValue = boolFromArg(rest, addon.session.overlay)
             addon:SetToggleMode("overlay", nextValue)
             addon:Print("Overlay mode: " .. tostring(addon.session.overlay))
+        elseif command == "export" or command == "profile" then
+            local exportArg = string.lower(tostring(rest or "")):gsub("^%s+", ""):gsub("%s+$", "")
+            if exportArg == "" or exportArg == "current" then
+                local contract = addon.OutputProfiles and addon.OutputProfiles:GetContract(addon:GetExportProfileKey()) or nil
+                if contract then
+                    addon:Print(string.format("Export profile: %s | %s | %dx%d", contract.key, contract.label, tonumber(contract.frame.width) or 0, tonumber(contract.frame.height) or 0))
+                else
+                    addon:Print("Export profile unavailable")
+                end
+            elseif exportArg == "list" then
+                printExportProfiles()
+            else
+                local ok, value = addon:SetExportProfile(exportArg)
+                if ok then
+                    local contract = addon.OutputProfiles and addon.OutputProfiles:GetContract(value) or nil
+                    addon:Print("Export profile: " .. tostring(contract and contract.label or value))
+                    refreshConfigIfShown()
+                else
+                    addon:Print(value or "Unknown export profile")
+                    printExportProfiles()
+                end
+            end
         elseif command == "hud" then
             local option = string.lower(rest or "")
             if option == "lock" then
