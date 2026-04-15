@@ -137,17 +137,29 @@ button:hover {
   height: 100vh;
   overflow: hidden;
   background: #010204;
-  -webkit-app-region: drag;
+  display: grid;
+  grid-template-rows: 18px 1fr;
+}
+
+#mirrorDragHandle {
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  background: rgba(18, 28, 44, 0.95);
+  color: #8dc7ff;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  user-select: none;
   cursor: move;
+  -webkit-app-region: drag;
 }
 
 #mirrorCanvas {
   display: block;
   width: 100%;
-  height: 100%;
+  height: calc(100vh - 18px);
   image-rendering: pixelated;
   background: #010204;
-  -webkit-app-region: drag;
 }
 
 .notes {

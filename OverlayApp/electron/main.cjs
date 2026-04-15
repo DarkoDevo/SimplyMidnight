@@ -22,12 +22,6 @@ function loadWindow(window, mirrorMode = false) {
   } else {
     window.loadFile(path.join(__dirname, "..", "dist", "index.html"));
   }
-
-  window.webContents.once("did-finish-load", () => {
-    window.webContents.send("overlay:view-mode", {
-      mirror: Boolean(mirrorMode)
-    });
-  });
 }
 
 function createWindow() {
@@ -43,7 +37,8 @@ function createWindow() {
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      additionalArguments: ["--sm-view=control"]
     }
   });
 
@@ -70,7 +65,8 @@ function ensureMirrorWindow() {
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      additionalArguments: ["--sm-view=mirror"]
     }
   });
   mirrorWindow.setMovable(true);

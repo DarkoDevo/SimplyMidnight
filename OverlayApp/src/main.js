@@ -2,7 +2,10 @@ import "./style.css";
 import { getOverlayProfile, getOverlayProfileKeys } from "./profiles";
 
 const urlState = new URL(window.location.href);
-let isMirrorMode = urlState.searchParams.get("mirror") === "1" || urlState.hash === "#mirror";
+const preloadViewMode = window.simplyMidnightApi && window.simplyMidnightApi.getViewMode
+  ? window.simplyMidnightApi.getViewMode()
+  : null;
+let isMirrorMode = preloadViewMode === "mirror" || urlState.searchParams.get("mirror") === "1" || urlState.hash === "#mirror";
 
 const app = document.querySelector("#app");
 const mirrorApp = document.querySelector("#mirrorApp");
@@ -365,23 +368,6 @@ function bootMirrorMode() {
 }
 
 applyViewMode();
-
-if (window.simplyMidnightApi && window.simplyMidnightApi.onViewMode) {
-  window.simplyMidnightApi.onViewMode((payload) => {
-    const nextMirrorMode = Boolean(payload && payload.mirror);
-    if (nextMirrorMode === isMirrorMode) {
-      return;
-    }
-
-    isMirrorMode = nextMirrorMode;
-    applyViewMode();
-    if (isMirrorMode) {
-      bootMirrorMode();
-    } else {
-      bootControlMode();
-    }
-  });
-}
 
 if (isMirrorMode) {
   bootMirrorMode();
