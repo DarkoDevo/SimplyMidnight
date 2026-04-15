@@ -1,10 +1,11 @@
-const { app, BrowserWindow, ipcMain, desktopCapturer, screen } = require("electron");
+const { app, BrowserWindow, ipcMain, desktopCapturer, screen, session } = require("electron");
 const path = require("path");
 
 const isDev = Boolean(process.env.VITE_DEV_SERVER_URL);
 
 let mainWindow = null;
 let mirrorWindow = null;
+let selectedCaptureSourceId = null;
 
 function loadWindow(window, mirrorMode = false) {
   if (isDev) {
@@ -113,6 +114,11 @@ ipcMain.handle("overlay:list-capture-sources", async () => {
   }));
 });
 
+ipcMain.handle("overlay:set-selected-source", (_, sourceId) => {
+  selectedCaptureSourceId = sourceId ? String(sourceId) : null;
+  return true;
+});
+
 ipcMain.handle("overlay:set-mirror-enabled", (_, value) => {
   if (value) {
     ensureMirrorWindow();
@@ -150,6 +156,30 @@ ipcMain.handle("overlay:get-meta", () => {
 });
 
 app.whenReady().then(() => {
+  session.defaultSession.setDisplayMediaRequestHandler(async (_, callback) => {
+    const sources = await desktopCapturer.getSources({
+      types: ["window", "screen"],
+      thumbnailSize: {
+        width: 1,
+        height: 1
+      }
+    });
+
+    let selectedSource = null
+    if (selectedCaptureSourceId) {
+      selectedSource = sources.find((source) => source.id === selectedCaptureSourceId) || null;
+    }
+
+    if (!selectedSource) {
+      selectedSource = sources.find((source) => source.id.startsWith("screen:")) || sources[0] || null;
+    }
+
+    callback({
+      video: selectedSource || undefined,
+      audio: false
+    });
+  }, { useSystemPicker: false });
+
   createWindow();
 
   app.on("activate", () => {

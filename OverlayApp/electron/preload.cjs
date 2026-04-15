@@ -4,6 +4,9 @@ contextBridge.exposeInMainWorld("simplyMidnightApi", {
   listCaptureSources() {
     return ipcRenderer.invoke("overlay:list-capture-sources");
   },
+  setSelectedCaptureSource(sourceId) {
+    return ipcRenderer.invoke("overlay:set-selected-source", sourceId);
+  },
   setAlwaysOnTop(value) {
     return ipcRenderer.invoke("overlay:set-always-on-top", value);
   },

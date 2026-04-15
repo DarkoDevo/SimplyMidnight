@@ -254,18 +254,14 @@ async function startCapture() {
   }
 
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({
+    if (window.simplyMidnightApi && window.simplyMidnightApi.setSelectedCaptureSource) {
+      await window.simplyMidnightApi.setSelectedCaptureSource(sourceId);
+    }
+
+    const stream = await navigator.mediaDevices.getDisplayMedia({
       audio: false,
       video: {
-        mandatory: {
-          chromeMediaSource: "desktop",
-          chromeMediaSourceId: sourceId,
-          maxFrameRate: 30,
-          minWidth: 320,
-          minHeight: 180,
-          maxWidth: 7680,
-          maxHeight: 4320
-        }
+        frameRate: 30
       }
     });
 
