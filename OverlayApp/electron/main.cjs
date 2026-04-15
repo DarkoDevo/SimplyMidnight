@@ -46,6 +46,7 @@ function createWindow() {
       nodeIntegration: false
     }
   });
+  mainWindow.setContentProtection(true);
 
   loadWindow(mainWindow, false);
   mainWindow.on("focus", syncMainWindowTopmost);
@@ -77,6 +78,7 @@ function ensureMirrorWindow() {
     }
   });
   mirrorWindow.setMovable(true);
+  mirrorWindow.setContentProtection(true);
 
   loadWindow(mirrorWindow, true);
   mirrorWindow.on("closed", () => {
