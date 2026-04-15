@@ -15,7 +15,9 @@ function loadWindow(window, mirrorMode = false) {
     window.loadURL(url.toString());
   } else if (mirrorMode) {
     window.loadFile(path.join(__dirname, "..", "dist", "index.html"), {
-      search: "mirror=1"
+      query: {
+        mirror: "1"
+      }
     });
   } else {
     window.loadFile(path.join(__dirname, "..", "dist", "index.html"));

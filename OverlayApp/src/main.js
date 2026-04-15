@@ -1,7 +1,8 @@
 import "./style.css";
 import { getOverlayProfile, getOverlayProfileKeys } from "./profiles";
 
-const isMirrorMode = new URLSearchParams(window.location.search).get("mirror") === "1";
+const urlState = new URL(window.location.href);
+const isMirrorMode = urlState.searchParams.get("mirror") === "1" || urlState.hash === "#mirror";
 
 if (isMirrorMode) {
   const app = document.querySelector("#app");
@@ -35,6 +36,9 @@ const mirrorButton = document.querySelector("#mirrorButton");
 const alwaysOnTop = document.querySelector("#alwaysOnTop");
 const profileSelect = document.querySelector("#profileSelect");
 const profileMeta = document.querySelector("#profileMeta");
+const sourceSelect = document.querySelector("#sourceSelect");
+const refreshSourcesButton = document.querySelector("#refreshSourcesButton");
+const sourceMeta = document.querySelector("#sourceMeta");
 const cropX = document.querySelector("#cropX");
 const cropY = document.querySelector("#cropY");
 const cropW = document.querySelector("#cropW");
@@ -65,6 +69,7 @@ function writeSettings() {
     storageKey,
     JSON.stringify({
       profile: profileSelect.value,
+      sourceId: sourceSelect.value,
       mirrorEnabled,
       cropX: cropX.value,
       cropY: cropY.value,
@@ -79,6 +84,7 @@ function writeSettings() {
 function applyStoredSettings() {
   const saved = readSettings();
   if (saved.profile != null) profileSelect.value = saved.profile;
+  if (saved.sourceId != null) sourceSelect.value = saved.sourceId;
   if (saved.mirrorEnabled != null) mirrorEnabled = Boolean(saved.mirrorEnabled);
   if (saved.cropX != null) cropX.value = saved.cropX;
   if (saved.cropY != null) cropY.value = saved.cropY;
@@ -98,6 +104,51 @@ function populateProfiles() {
     fragment.appendChild(option);
   }
   profileSelect.replaceChildren(fragment);
+}
+
+function pickPreferredSource(sources) {
+  const saved = readSettings();
+  if (saved.sourceId && sources.some((source) => source.id === saved.sourceId)) {
+    return saved.sourceId;
+  }
+
+  const wowWindow = sources.find((source) => /world of warcraft/i.test(source.name));
+  if (wowWindow) {
+    return wowWindow.id;
+  }
+
+  const primaryScreen = sources.find((source) => source.id.startsWith("screen:"));
+  if (primaryScreen) {
+    return primaryScreen.id;
+  }
+
+  return sources[0] ? sources[0].id : "";
+}
+
+async function refreshCaptureSources() {
+  if (!window.simplyMidnightApi || !window.simplyMidnightApi.listCaptureSources) {
+    sourceMeta.textContent = "Capture source listing is unavailable in this build.";
+    return;
+  }
+
+  const sources = await window.simplyMidnightApi.listCaptureSources();
+  const fragment = document.createDocumentFragment();
+  for (const source of sources) {
+    const option = document.createElement("option");
+    option.value = source.id;
+    option.textContent = source.name;
+    fragment.appendChild(option);
+  }
+
+  sourceSelect.replaceChildren(fragment);
+  sourceSelect.value = pickPreferredSource(sources);
+
+  const selectedSource = sources.find((source) => source.id === sourceSelect.value);
+  sourceMeta.textContent = selectedSource
+    ? `Selected: ${selectedSource.name}`
+    : "Choose the WoW window or your main monitor before starting capture.";
+
+  writeSettings();
 }
 
 function applyProfilePreset({ keepPosition = true } = {}) {
@@ -176,11 +227,25 @@ async function startCapture() {
     stopLoop();
   }
 
+  const sourceId = sourceSelect.value;
+  if (!sourceId) {
+    status.textContent = "Capture failed: choose a source first";
+    return;
+  }
+
   try {
-    const stream = await navigator.mediaDevices.getDisplayMedia({
+    const stream = await navigator.mediaDevices.getUserMedia({
       audio: false,
       video: {
-        frameRate: 30
+        mandatory: {
+          chromeMediaSource: "desktop",
+          chromeMediaSourceId: sourceId,
+          maxFrameRate: 30,
+          minWidth: 320,
+          minHeight: 180,
+          maxWidth: 7680,
+          maxHeight: 4320
+        }
       }
     });
 
@@ -202,6 +267,9 @@ async function startCapture() {
 }
 
 captureButton.addEventListener("click", startCapture);
+refreshSourcesButton.addEventListener("click", async () => {
+  await refreshCaptureSources();
+});
 mirrorButton.addEventListener("click", async () => {
   mirrorEnabled = !mirrorEnabled;
   updateMirrorButton();
@@ -227,6 +295,12 @@ alwaysOnTop.addEventListener("change", async () => {
   });
 });
 
+sourceSelect.addEventListener("change", () => {
+  const label = sourceSelect.options[sourceSelect.selectedIndex]?.textContent;
+  sourceMeta.textContent = label ? `Selected: ${label}` : "Choose the WoW window or your main monitor before starting capture.";
+  writeSettings();
+});
+
 [cropX, cropY, cropW, cropH, scaleInput].forEach((element) => {
   element.addEventListener("input", () => {
     updateMirrorBounds();
@@ -240,6 +314,7 @@ applyProfilePreset();
 updateMirrorButton();
 
 if (window.simplyMidnightApi) {
+  refreshCaptureSources();
   window.simplyMidnightApi.setAlwaysOnTop(alwaysOnTop.checked);
   window.simplyMidnightApi.getMeta().then((meta) => {
     const profile = getOverlayProfile(profileSelect.value);
