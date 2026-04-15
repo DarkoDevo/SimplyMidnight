@@ -518,9 +518,6 @@ function Trackers:Poll()
         elseif observedOutbreakCastAt > 0 and requestedAt > 0 and observedOutbreakCastAt >= (requestedAt - 0.25) then
             self:RememberOutbreakForGUID(guid, OUTBREAK_TRACK_SECONDS)
             self.outbreakRequestedByGUID[guid] = nil
-        elseif getSpellCooldownRemaining(OUTBREAK_SPELL_ID) > 0 then
-            self:RememberOutbreakForGUID(guid, OUTBREAK_TRACK_SECONDS)
-            self.outbreakRequestedByGUID[guid] = nil
         end
     end
 
