@@ -7,6 +7,18 @@ let mainWindow = null;
 let mirrorWindow = null;
 let selectedCaptureSourceId = null;
 
+function syncMainWindowTopmost() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return;
+  }
+
+  if (mainWindow.isFocused()) {
+    mainWindow.setAlwaysOnTop(true, "floating");
+  } else {
+    mainWindow.setAlwaysOnTop(false);
+  }
+}
+
 function loadWindow(window, mirrorMode = false) {
   if (isDev) {
     const baseUrl = process.env.VITE_DEV_SERVER_URL.replace(/\/$/, "");
@@ -25,7 +37,7 @@ function createWindow() {
     minWidth: 840,
     minHeight: 640,
     title: "SimplyMidnight Overlay",
-    alwaysOnTop: true,
+    alwaysOnTop: false,
     autoHideMenuBar: true,
     backgroundColor: "#0b0d12",
     webPreferences: {
@@ -36,6 +48,9 @@ function createWindow() {
   });
 
   loadWindow(mainWindow, false);
+  mainWindow.on("focus", syncMainWindowTopmost);
+  mainWindow.on("blur", syncMainWindowTopmost);
+  syncMainWindowTopmost();
 }
 
 function ensureMirrorWindow() {
@@ -71,9 +86,6 @@ function ensureMirrorWindow() {
 }
 
 ipcMain.handle("overlay:set-always-on-top", (_, value) => {
-  if (mainWindow) {
-    mainWindow.setAlwaysOnTop(Boolean(value));
-  }
   if (mirrorWindow && !mirrorWindow.isDestroyed()) {
     mirrorWindow.setAlwaysOnTop(Boolean(value));
   }
