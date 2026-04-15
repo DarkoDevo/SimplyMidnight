@@ -77,6 +77,42 @@ local function buildDefaultManualConditions(slot)
     return conditions
 end
 
+local function conditionsMatchDefault(entry)
+    if type(entry) ~= "table" then
+        return false
+    end
+
+    local expected = buildDefaultManualConditions(entry.slot)
+    local actual = type(entry.conditions) == "table" and entry.conditions or {}
+
+    for key, value in pairs(expected) do
+        if actual[key] ~= value then
+            return false
+        end
+    end
+
+    for key in pairs(actual) do
+        if expected[key] == nil then
+            return false
+        end
+    end
+
+    return true
+end
+
+local function isTemporaryManualPrimary(entry)
+    local spellID = tonumber(entry and entry.spellID)
+    if type(entry) ~= "table" or entry.source ~= "manual" or entry.slot ~= "primary" then
+        return false
+    end
+
+    if spellID ~= 1247378 and spellID ~= 444347 then
+        return false
+    end
+
+    return conditionsMatchDefault(entry)
+end
+
 function Registry:NormalizeEntry(entry)
     return {
         spellID = tonumber(entry.spellID),
@@ -131,6 +167,9 @@ function Registry:Initialize()
         end
         if previousVersion < 3 and addon.db.registry.spells[index].source == "manual" and isEmptyTable(addon.db.registry.spells[index].conditions) then
             addon.db.registry.spells[index].conditions = buildDefaultManualConditions(addon.db.registry.spells[index].slot)
+        end
+        if previousVersion < 4 and isTemporaryManualPrimary(addon.db.registry.spells[index]) then
+            addon.db.registry.spells[index].enabled = false
         end
     end
 
