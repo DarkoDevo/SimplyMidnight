@@ -41,6 +41,7 @@ function applyViewMode() {
   if (app) app.hidden = isMirrorMode;
   if (mirrorApp) mirrorApp.hidden = !isMirrorMode;
   document.body.style.overflow = isMirrorMode ? "hidden" : "";
+  document.body.classList.toggle("mirror-mode", isMirrorMode);
 }
 
 function readSettings() {

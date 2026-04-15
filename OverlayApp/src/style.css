@@ -13,6 +13,10 @@ body {
     linear-gradient(180deg, #0b0d12 0%, #0f131d 100%);
 }
 
+body.mirror-mode {
+  background: #010204;
+}
+
 #app {
   display: grid;
   grid-template-columns: 320px 1fr;
@@ -133,6 +137,8 @@ button:hover {
   height: 100vh;
   overflow: hidden;
   background: #010204;
+  -webkit-app-region: drag;
+  cursor: move;
 }
 
 #mirrorCanvas {
@@ -141,6 +147,7 @@ button:hover {
   height: 100%;
   image-rendering: pixelated;
   background: #010204;
+  -webkit-app-region: drag;
 }
 
 .notes {

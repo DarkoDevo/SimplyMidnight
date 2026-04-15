@@ -73,6 +73,7 @@ function ensureMirrorWindow() {
       nodeIntegration: false
     }
   });
+  mirrorWindow.setMovable(true);
 
   loadWindow(mirrorWindow, true);
   mirrorWindow.on("closed", () => {
