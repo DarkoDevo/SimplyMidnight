@@ -168,7 +168,7 @@ button:hover {
   overflow: hidden;
   background: #010204;
   display: grid;
-  grid-template-rows: 18px 1fr;
+  grid-template-rows: 16px 1fr;
 }
 
 #mirrorDragHandle {
@@ -178,7 +178,7 @@ button:hover {
   padding: 0 8px;
   background: rgba(18, 28, 44, 0.95);
   color: #8dc7ff;
-  font-size: 11px;
+  font-size: 10px;
   letter-spacing: 0.02em;
   user-select: none;
   cursor: move;
@@ -188,7 +188,7 @@ button:hover {
 #mirrorCanvas {
   display: block;
   width: 100%;
-  height: calc(100vh - 18px);
+  height: calc(100vh - 16px);
   image-rendering: pixelated;
   background: #010204;
 }
