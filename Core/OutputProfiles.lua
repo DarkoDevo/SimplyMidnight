@@ -90,7 +90,7 @@ OutputProfiles.profiles.ggl_legacy_5slot = {
         mirrorFriendly = true,
     },
     frame = {
-        width = 288,
+        width = 304,
         height = 56,
     },
     signature = {
@@ -127,7 +127,7 @@ OutputProfiles.profiles.ggl_legacy_5slot = {
         yOffset = -6,
     },
     overlay = {
-        cropWidth = 288,
+        cropWidth = 304,
         cropHeight = 56,
         defaultScale = 3,
     },
