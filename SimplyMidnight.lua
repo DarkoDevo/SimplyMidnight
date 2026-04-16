@@ -3,7 +3,7 @@ local addonName, addon = ...
 _G.SimplyMidnight = addon
 
 addon.name = addonName
-addon.version = "0.969.99"
+addon.version = "0.3.0"
 addon.constants = {
     questionMarkIcon = 134400,
     slotOrder = { "primary", "secondary", "defensive", "interrupt", "utility" },
