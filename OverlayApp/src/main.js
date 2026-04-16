@@ -11,6 +11,7 @@ const profileMeta = document.querySelector("#profileMeta");
 const sourceSelect = document.querySelector("#sourceSelect");
 const refreshSourcesButton = document.querySelector("#refreshSourcesButton");
 const identifyScreensButton = document.querySelector("#identifyScreensButton");
+const autoLocateButton = document.querySelector("#autoLocateButton");
 const sourceMeta = document.querySelector("#sourceMeta");
 const cropX = document.querySelector("#cropX");
 const cropY = document.querySelector("#cropY");
@@ -29,6 +30,8 @@ let mirrorEnabled = false;
 let lastMirrorPushAt = 0;
 let captureSources = [];
 const frameIntervalMs = 33;
+const locateCanvas = document.createElement("canvas");
+const locateContext = locateCanvas.getContext("2d", { willReadFrequently: true });
 
 const storageKey = "simplymidnight-overlay-settings";
 
@@ -207,6 +210,91 @@ function applyProfilePreset({ keepPosition = true } = {}) {
   writeSettings();
 }
 
+function isMagenta(red, green, blue, alpha) {
+  return alpha >= 200 && red >= 220 && green <= 70 && blue >= 220;
+}
+
+function isCyan(red, green, blue, alpha) {
+  return alpha >= 200 && red <= 70 && green >= 220 && blue >= 220;
+}
+
+function locateSignatureBounds(profile) {
+  if (!activeStream || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+    return null;
+  }
+
+  const sourceWidth = video.videoWidth || 0;
+  const sourceHeight = video.videoHeight || 0;
+  if (sourceWidth <= 0 || sourceHeight <= 0) {
+    return null;
+  }
+
+  locateCanvas.width = sourceWidth;
+  locateCanvas.height = sourceHeight;
+  locateContext.drawImage(video, 0, 0, sourceWidth, sourceHeight);
+  const imageData = locateContext.getImageData(0, 0, sourceWidth, sourceHeight);
+  const pixels = imageData.data;
+  const signatureSize = Math.max(Number(profile.signatureSize) || 6, 1);
+  const signatureGap = Math.max(Number(profile.signatureGap) || 2, 0);
+  const cyanOffset = signatureSize + signatureGap;
+
+  function sample(x, y) {
+    if (x < 0 || y < 0 || x >= sourceWidth || y >= sourceHeight) {
+      return null;
+    }
+
+    const index = ((y * sourceWidth) + x) * 4;
+    return {
+      red: pixels[index],
+      green: pixels[index + 1],
+      blue: pixels[index + 2],
+      alpha: pixels[index + 3]
+    };
+  }
+
+  for (let y = 0; y <= sourceHeight - signatureSize; y += 1) {
+    for (let x = 0; x <= sourceWidth - (cyanOffset + signatureSize); x += 1) {
+      const magentaA = sample(x, y);
+      const magentaB = sample(x + Math.max(signatureSize - 1, 0), y + Math.max(signatureSize - 1, 0));
+      const cyanA = sample(x + cyanOffset, y);
+      const cyanB = sample(x + cyanOffset + Math.max(signatureSize - 1, 0), y + Math.max(signatureSize - 1, 0));
+
+      if (
+        magentaA && magentaB && cyanA && cyanB &&
+        isMagenta(magentaA.red, magentaA.green, magentaA.blue, magentaA.alpha) &&
+        isMagenta(magentaB.red, magentaB.green, magentaB.blue, magentaB.alpha) &&
+        isCyan(cyanA.red, cyanA.green, cyanA.blue, cyanA.alpha) &&
+        isCyan(cyanB.red, cyanB.green, cyanB.blue, cyanB.alpha)
+      ) {
+        return {
+          x: Math.max(x - (profile.signatureX || 0), 0),
+          y: Math.max(y - (profile.signatureY || 0), 0)
+        };
+      }
+    }
+  }
+
+  return null;
+}
+
+function autoLocateProfileCrop() {
+  const profile = getOverlayProfile(profileSelect.value);
+  const match = locateSignatureBounds(profile);
+  if (!match) {
+    status.textContent = "Auto locate failed: signature pixels not found in the current capture";
+    return false;
+  }
+
+  cropX.value = String(match.x);
+  cropY.value = String(match.y);
+  cropW.value = String(profile.cropW);
+  cropH.value = String(profile.cropH);
+  status.textContent = `Auto locate matched at ${match.x}, ${match.y}`;
+  updateMirrorBounds();
+  writeSettings();
+  return true;
+}
+
 async function updateMirrorBounds() {
   if (!window.simplyMidnightApi || !mirrorEnabled) {
     return;
@@ -324,6 +412,9 @@ identifyScreensButton.addEventListener("click", async () => {
   if (window.simplyMidnightApi && window.simplyMidnightApi.identifyDisplays) {
     await window.simplyMidnightApi.identifyDisplays();
   }
+});
+autoLocateButton.addEventListener("click", () => {
+  autoLocateProfileCrop();
 });
 mirrorButton.addEventListener("click", async () => {
   mirrorEnabled = !mirrorEnabled;

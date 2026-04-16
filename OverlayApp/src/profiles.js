@@ -5,7 +5,11 @@ export const overlayProfiles = {
     description: "Full in-game HUD with labels, bars, and flags.",
     cropW: 390,
     cropH: 132,
-    scale: 2
+    scale: 2,
+    signatureX: 4,
+    signatureY: 4,
+    signatureSize: 8,
+    signatureGap: 2
   },
   ggl_legacy_5slot: {
     key: "ggl_legacy_5slot",
@@ -13,7 +17,11 @@ export const overlayProfiles = {
     description: "Lean five-slot strip sized for legacy GGLoader icon reading.",
     cropW: 252,
     cropH: 56,
-    scale: 3
+    scale: 3,
+    signatureX: 4,
+    signatureY: 4,
+    signatureSize: 6,
+    signatureGap: 2
   },
   overlay_compact: {
     key: "overlay_compact",
@@ -21,7 +29,11 @@ export const overlayProfiles = {
     description: "Compact overlay with icons, bars, and a few state cells.",
     cropW: 256,
     cropH: 92,
-    scale: 2.5
+    scale: 2.5,
+    signatureX: 4,
+    signatureY: 4,
+    signatureSize: 6,
+    signatureGap: 2
   }
 };
 
