@@ -28,6 +28,7 @@ let frameHandle = null;
 let mirrorEnabled = false;
 let lastMirrorPushAt = 0;
 let captureSources = [];
+const frameIntervalMs = 33;
 
 const storageKey = "simplymidnight-overlay-settings";
 
@@ -222,14 +223,14 @@ function updateMirrorButton() {
 
 function stopLoop() {
   if (frameHandle != null) {
-    cancelAnimationFrame(frameHandle);
+    clearTimeout(frameHandle);
     frameHandle = null;
   }
 }
 
 function drawFrame() {
   if (!activeStream || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
-    frameHandle = requestAnimationFrame(drawFrame);
+    frameHandle = window.setTimeout(drawFrame, frameIntervalMs);
     return;
   }
 
@@ -257,7 +258,7 @@ function drawFrame() {
     }
   }
 
-  frameHandle = requestAnimationFrame(drawFrame);
+  frameHandle = window.setTimeout(drawFrame, frameIntervalMs);
 }
 
 async function startCapture() {
