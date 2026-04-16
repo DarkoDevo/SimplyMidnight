@@ -8,17 +8,14 @@ let mirrorWindow = null;
 let selectedCaptureSourceId = null;
 let identifyWindows = [];
 let identifyTimeout = null;
+let overlayAlwaysOnTop = true;
 
-function syncMainWindowTopmost() {
-  if (!mainWindow || mainWindow.isDestroyed()) {
+function applyOverlayTopmost(window) {
+  if (!window || window.isDestroyed()) {
     return;
   }
 
-  if (mainWindow.isFocused()) {
-    mainWindow.setAlwaysOnTop(true, "floating");
-  } else {
-    mainWindow.setAlwaysOnTop(false);
-  }
+  window.setAlwaysOnTop(overlayAlwaysOnTop, "floating");
 }
 
 function loadWindow(window, mirrorMode = false) {
@@ -127,7 +124,7 @@ function createWindow() {
     minWidth: 840,
     minHeight: 640,
     title: "SimplyMidnight Overlay",
-    alwaysOnTop: false,
+    alwaysOnTop: overlayAlwaysOnTop,
     autoHideMenuBar: true,
     backgroundColor: "#0b0d12",
     webPreferences: {
@@ -137,11 +134,11 @@ function createWindow() {
     }
   });
   mainWindow.setContentProtection(true);
+  applyOverlayTopmost(mainWindow);
 
   loadWindow(mainWindow, false);
-  mainWindow.on("focus", syncMainWindowTopmost);
-  mainWindow.on("blur", syncMainWindowTopmost);
-  syncMainWindowTopmost();
+  mainWindow.on("restore", () => applyOverlayTopmost(mainWindow));
+  mainWindow.on("show", () => applyOverlayTopmost(mainWindow));
 }
 
 function ensureMirrorWindow() {
@@ -157,7 +154,7 @@ function ensureMirrorWindow() {
     frame: false,
     transparent: false,
     title: "SimplyMidnight Mirror",
-    alwaysOnTop: true,
+    alwaysOnTop: overlayAlwaysOnTop,
     autoHideMenuBar: true,
     resizable: true,
     backgroundColor: "#010204",
@@ -169,6 +166,7 @@ function ensureMirrorWindow() {
   });
   mirrorWindow.setMovable(true);
   mirrorWindow.setContentProtection(true);
+  applyOverlayTopmost(mirrorWindow);
 
   loadWindow(mirrorWindow, true);
   mirrorWindow.on("closed", () => {
@@ -178,9 +176,9 @@ function ensureMirrorWindow() {
 }
 
 ipcMain.handle("overlay:set-always-on-top", (_, value) => {
-  if (mirrorWindow && !mirrorWindow.isDestroyed()) {
-    mirrorWindow.setAlwaysOnTop(Boolean(value));
-  }
+  overlayAlwaysOnTop = Boolean(value);
+  applyOverlayTopmost(mainWindow);
+  applyOverlayTopmost(mirrorWindow);
   return true;
 });
 
