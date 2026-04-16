@@ -11,7 +11,7 @@ export const overlayProfiles = {
     key: "ggl_legacy_5slot",
     label: "GGL Legacy 5 Slot",
     description: "Lean five-slot strip sized for legacy GGLoader icon reading.",
-    cropW: 236,
+    cropW: 252,
     cropH: 56,
     scale: 3
   },
