@@ -1,4 +1,5 @@
 const { app, BrowserWindow, ipcMain, desktopCapturer, screen, session } = require("electron");
+const fs = require("fs");
 const path = require("path");
 
 const isDev = Boolean(process.env.VITE_DEV_SERVER_URL);
@@ -9,6 +10,108 @@ let selectedCaptureSourceId = null;
 let identifyWindows = [];
 let identifyTimeout = null;
 let overlayAlwaysOnTop = true;
+let windowStateSaveTimeout = null;
+
+function getWindowStatePath() {
+  return path.join(app.getPath("userData"), "overlay-window-state.json");
+}
+
+function readWindowStates() {
+  try {
+    return JSON.parse(fs.readFileSync(getWindowStatePath(), "utf8"));
+  } catch {
+    return {};
+  }
+}
+
+function writeWindowStates(states) {
+  try {
+    fs.writeFileSync(getWindowStatePath(), JSON.stringify(states, null, 2), "utf8");
+  } catch {
+    // Best effort only; window placement should not break the app if write fails.
+  }
+}
+
+function persistWindowStatesNow() {
+  const states = readWindowStates();
+
+  if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isMinimized()) {
+    states.main = mainWindow.getBounds();
+  }
+
+  if (mirrorWindow && !mirrorWindow.isDestroyed() && !mirrorWindow.isMinimized()) {
+    states.mirror = mirrorWindow.getBounds();
+  }
+
+  writeWindowStates(states);
+}
+
+function getDisplayWorkArea(bounds) {
+  if (!bounds) {
+    return null;
+  }
+
+  const display = screen.getDisplayMatching(bounds);
+  return display && display.workArea ? display.workArea : null;
+}
+
+function clampBoundsToDisplay(state, defaults) {
+  if (!state) {
+    return defaults;
+  }
+
+  const width = Math.max(Number(state.width) || defaults.width, defaults.minWidth || 1);
+  const height = Math.max(Number(state.height) || defaults.height, defaults.minHeight || 1);
+  const probeBounds = {
+    x: Number(state.x),
+    y: Number(state.y),
+    width,
+    height
+  };
+  const workArea = getDisplayWorkArea(probeBounds);
+  if (!workArea) {
+    return { ...defaults, width, height };
+  }
+
+  const maxX = workArea.x + Math.max(workArea.width - width, 0);
+  const maxY = workArea.y + Math.max(workArea.height - height, 0);
+  const x = Math.min(Math.max(Number.isFinite(probeBounds.x) ? probeBounds.x : defaults.x, workArea.x), maxX);
+  const y = Math.min(Math.max(Number.isFinite(probeBounds.y) ? probeBounds.y : defaults.y, workArea.y), maxY);
+
+  return {
+    ...defaults,
+    x,
+    y,
+    width,
+    height
+  };
+}
+
+function getSavedWindowState(key, defaults) {
+  const states = readWindowStates();
+  return clampBoundsToDisplay(states[key], defaults);
+}
+
+function queueWindowStateSave() {
+  if (windowStateSaveTimeout) {
+    clearTimeout(windowStateSaveTimeout);
+  }
+
+  windowStateSaveTimeout = setTimeout(() => {
+    windowStateSaveTimeout = null;
+    persistWindowStatesNow();
+  }, 150);
+}
+
+function watchWindowState(window) {
+  if (!window || window.isDestroyed()) {
+    return;
+  }
+
+  window.on("move", queueWindowStateSave);
+  window.on("resize", queueWindowStateSave);
+  window.on("close", queueWindowStateSave);
+}
 
 function applyOverlayTopmost(window) {
   if (!window || window.isDestroyed()) {
@@ -118,9 +221,20 @@ function showDisplayIdentifiers(durationMs = 2500) {
 }
 
 function createWindow() {
-  mainWindow = new BrowserWindow({
+  const state = getSavedWindowState("main", {
+    x: undefined,
+    y: undefined,
     width: 980,
     height: 760,
+    minWidth: 840,
+    minHeight: 640
+  });
+
+  mainWindow = new BrowserWindow({
+    x: state.x,
+    y: state.y,
+    width: state.width,
+    height: state.height,
     minWidth: 840,
     minHeight: 640,
     title: "SimplyMidnight Overlay",
@@ -139,6 +253,7 @@ function createWindow() {
   loadWindow(mainWindow, false);
   mainWindow.on("restore", () => applyOverlayTopmost(mainWindow));
   mainWindow.on("show", () => applyOverlayTopmost(mainWindow));
+  watchWindowState(mainWindow);
 }
 
 function ensureMirrorWindow() {
@@ -146,9 +261,20 @@ function ensureMirrorWindow() {
     return mirrorWindow;
   }
 
-  mirrorWindow = new BrowserWindow({
+  const state = getSavedWindowState("mirror", {
+    x: undefined,
+    y: undefined,
     width: 708,
     height: 168,
+    minWidth: 120,
+    minHeight: 30
+  });
+
+  mirrorWindow = new BrowserWindow({
+    x: state.x,
+    y: state.y,
+    width: state.width,
+    height: state.height,
     minWidth: 120,
     minHeight: 30,
     frame: false,
@@ -172,6 +298,7 @@ function ensureMirrorWindow() {
   mirrorWindow.on("closed", () => {
     mirrorWindow = null;
   });
+  watchWindowState(mirrorWindow);
   return mirrorWindow;
 }
 
@@ -319,5 +446,10 @@ app.on("window-all-closed", () => {
 });
 
 app.on("before-quit", () => {
+  if (windowStateSaveTimeout) {
+    clearTimeout(windowStateSaveTimeout);
+    windowStateSaveTimeout = null;
+  }
+  persistWindowStatesNow();
   clearIdentifyWindows();
 });
