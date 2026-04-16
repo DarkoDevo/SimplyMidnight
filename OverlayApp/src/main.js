@@ -6,6 +6,7 @@ const app = document.querySelector("#app");
 const captureButton = document.querySelector("#captureButton");
 const mirrorButton = document.querySelector("#mirrorButton");
 const alwaysOnTop = document.querySelector("#alwaysOnTop");
+const appVersion = document.querySelector("#appVersion");
 const profileSelect = document.querySelector("#profileSelect");
 const profileMeta = document.querySelector("#profileMeta");
 const sourceSelect = document.querySelector("#sourceSelect");
@@ -512,6 +513,9 @@ if (window.simplyMidnightApi) {
   window.simplyMidnightApi.setAlwaysOnTop(true);
   window.simplyMidnightApi.getMeta().then((meta) => {
     const profile = getOverlayProfile(profileSelect.value);
+    if (appVersion) {
+      appVersion.textContent = `v${meta.version}`;
+    }
     status.textContent = `Ready | overlay v${meta.version} | ${profile.label}`;
   });
   if (mirrorEnabled) {

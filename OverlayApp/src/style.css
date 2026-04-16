@@ -31,9 +31,31 @@ body.mirror-mode {
   backdrop-filter: blur(6px);
 }
 
+.titleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .panel h1 {
   margin: 0 0 10px;
   font-size: 24px;
+}
+
+.versionBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 56px;
+  padding: 4px 8px;
+  border: 1px solid rgba(126, 200, 255, 0.22);
+  border-radius: 999px;
+  background: rgba(18, 28, 44, 0.78);
+  color: #8dc7ff;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
 }
 
 .lead {
@@ -152,6 +174,7 @@ button:hover {
 #mirrorDragHandle {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   padding: 0 8px;
   background: rgba(18, 28, 44, 0.95);
   color: #8dc7ff;

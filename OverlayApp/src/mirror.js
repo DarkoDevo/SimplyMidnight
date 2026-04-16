@@ -1,6 +1,7 @@
 import "./style.css";
 
 const mirrorCanvas = document.querySelector("#mirrorCanvas");
+const mirrorVersion = document.querySelector("#mirrorVersion");
 const mirrorContext = mirrorCanvas.getContext("2d");
 const frameImage = new Image();
 
@@ -13,6 +14,12 @@ frameImage.addEventListener("load", () => {
 });
 
 if (window.simplyMidnightApi) {
+  window.simplyMidnightApi.getMeta().then((meta) => {
+    if (mirrorVersion) {
+      mirrorVersion.textContent = `v${meta.version}`;
+    }
+  });
+
   window.simplyMidnightApi.onMirrorFrame((payload) => {
     if (!payload || !payload.dataUrl) {
       return;
