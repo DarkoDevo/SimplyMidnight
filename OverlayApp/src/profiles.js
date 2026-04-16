@@ -17,14 +17,14 @@ export const overlayProfiles = {
     key: "ggl_legacy_5slot",
     label: "GGL Legacy 5 Slot",
     description: "Lean five-slot strip sized for legacy GGLoader icon reading.",
-    cropW: 252,
+    cropW: 288,
     cropH: 56,
     scale: 3,
     signatureX: 4,
     signatureY: 4,
     signatureSize: 6,
     signatureGap: 2,
-    locatePadX: 12,
+    locatePadX: 0,
     locatePadY: 0
   },
   overlay_compact: {
