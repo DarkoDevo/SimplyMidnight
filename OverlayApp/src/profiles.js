@@ -9,7 +9,9 @@ export const overlayProfiles = {
     signatureX: 4,
     signatureY: 4,
     signatureSize: 8,
-    signatureGap: 2
+    signatureGap: 2,
+    locatePadX: 0,
+    locatePadY: 0
   },
   ggl_legacy_5slot: {
     key: "ggl_legacy_5slot",
@@ -21,7 +23,9 @@ export const overlayProfiles = {
     signatureX: 4,
     signatureY: 4,
     signatureSize: 6,
-    signatureGap: 2
+    signatureGap: 2,
+    locatePadX: 12,
+    locatePadY: 0
   },
   overlay_compact: {
     key: "overlay_compact",
@@ -33,7 +37,9 @@ export const overlayProfiles = {
     signatureX: 4,
     signatureY: 4,
     signatureSize: 6,
-    signatureGap: 2
+    signatureGap: 2,
+    locatePadX: 0,
+    locatePadY: 0
   }
 };
 

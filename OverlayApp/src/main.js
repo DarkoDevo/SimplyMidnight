@@ -279,8 +279,8 @@ function locateSignatureInImageData(imageData, imageWidth, imageHeight, profile,
         isCyan(cyanB.red, cyanB.green, cyanB.blue, cyanB.alpha)
       ) {
         return {
-          x: Math.max(offsetX + x - (profile.signatureX || 0), 0),
-          y: Math.max(offsetY + y - (profile.signatureY || 0), 0)
+          x: Math.max(offsetX + x - (profile.signatureX || 0) - (profile.locatePadX || 0), 0),
+          y: Math.max(offsetY + y - (profile.signatureY || 0) - (profile.locatePadY || 0), 0)
         };
       }
     }
