@@ -253,6 +253,13 @@ function createWindow() {
   loadWindow(mainWindow, false);
   mainWindow.on("restore", () => applyOverlayTopmost(mainWindow));
   mainWindow.on("show", () => applyOverlayTopmost(mainWindow));
+  mainWindow.on("closed", () => {
+    mainWindow = null;
+    if (mirrorWindow && !mirrorWindow.isDestroyed()) {
+      mirrorWindow.close();
+      mirrorWindow = null;
+    }
+  });
   watchWindowState(mainWindow);
 }
 
