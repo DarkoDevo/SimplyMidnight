@@ -11,6 +11,7 @@ let identifyWindows = [];
 let identifyTimeout = null;
 let overlayAlwaysOnTop = true;
 let windowStateSaveTimeout = null;
+const overlayTopmostLevel = "screen-saver";
 
 function getWindowStatePath() {
   return path.join(app.getPath("userData"), "overlay-window-state.json");
@@ -118,7 +119,30 @@ function applyOverlayTopmost(window) {
     return;
   }
 
-  window.setAlwaysOnTop(overlayAlwaysOnTop, "floating");
+  if (!overlayAlwaysOnTop) {
+    window.setAlwaysOnTop(false);
+    return;
+  }
+
+  window.setAlwaysOnTop(true, overlayTopmostLevel, 1);
+  if (typeof window.moveTop === "function") {
+    try {
+      window.moveTop();
+    } catch {
+      // Best effort only.
+    }
+  }
+}
+
+function reinforceOverlayTopmost(window) {
+  if (!window || window.isDestroyed()) {
+    return;
+  }
+
+  applyOverlayTopmost(window);
+  setTimeout(() => {
+    applyOverlayTopmost(window);
+  }, 50);
 }
 
 function loadWindow(window, mirrorMode = false) {
@@ -249,11 +273,13 @@ function createWindow() {
     }
   });
   mainWindow.setContentProtection(true);
-  applyOverlayTopmost(mainWindow);
+  reinforceOverlayTopmost(mainWindow);
 
   loadWindow(mainWindow, false);
-  mainWindow.on("restore", () => applyOverlayTopmost(mainWindow));
-  mainWindow.on("show", () => applyOverlayTopmost(mainWindow));
+  mainWindow.on("restore", () => reinforceOverlayTopmost(mainWindow));
+  mainWindow.on("show", () => reinforceOverlayTopmost(mainWindow));
+  mainWindow.on("focus", () => reinforceOverlayTopmost(mainWindow));
+  mainWindow.on("ready-to-show", () => reinforceOverlayTopmost(mainWindow));
   mainWindow.on("closed", () => {
     mainWindow = null;
     if (mirrorWindow && !mirrorWindow.isDestroyed()) {
@@ -301,9 +327,13 @@ function ensureMirrorWindow() {
   });
   mirrorWindow.setMovable(true);
   mirrorWindow.setContentProtection(true);
-  applyOverlayTopmost(mirrorWindow);
+  reinforceOverlayTopmost(mirrorWindow);
 
   loadWindow(mirrorWindow, true);
+  mirrorWindow.on("restore", () => reinforceOverlayTopmost(mirrorWindow));
+  mirrorWindow.on("show", () => reinforceOverlayTopmost(mirrorWindow));
+  mirrorWindow.on("focus", () => reinforceOverlayTopmost(mirrorWindow));
+  mirrorWindow.on("ready-to-show", () => reinforceOverlayTopmost(mirrorWindow));
   mirrorWindow.on("closed", () => {
     mirrorWindow = null;
   });
