@@ -211,11 +211,81 @@ function applyProfilePreset({ keepPosition = true } = {}) {
 }
 
 function isMagenta(red, green, blue, alpha) {
-  return alpha >= 200 && red >= 220 && green <= 70 && blue >= 220;
+  return alpha >= 96 && red >= 140 && green <= 140 && blue >= 140 && (red + blue - green) >= 260;
 }
 
 function isCyan(red, green, blue, alpha) {
-  return alpha >= 200 && red <= 70 && green >= 220 && blue >= 220;
+  return alpha >= 96 && red <= 140 && green >= 140 && blue >= 140 && (green + blue - red) >= 260;
+}
+
+function getImageDataFromVideoRegion(x, y, width, height) {
+  const sourceWidth = video.videoWidth || 0;
+  const sourceHeight = video.videoHeight || 0;
+  if (sourceWidth <= 0 || sourceHeight <= 0) {
+    return null;
+  }
+
+  const safeX = Math.max(0, Math.min(Math.floor(x), Math.max(sourceWidth - 1, 0)));
+  const safeY = Math.max(0, Math.min(Math.floor(y), Math.max(sourceHeight - 1, 0)));
+  const safeWidth = Math.max(1, Math.min(Math.floor(width), sourceWidth - safeX));
+  const safeHeight = Math.max(1, Math.min(Math.floor(height), sourceHeight - safeY));
+
+  locateCanvas.width = safeWidth;
+  locateCanvas.height = safeHeight;
+  locateContext.drawImage(video, safeX, safeY, safeWidth, safeHeight, 0, 0, safeWidth, safeHeight);
+  return {
+    imageData: locateContext.getImageData(0, 0, safeWidth, safeHeight),
+    width: safeWidth,
+    height: safeHeight,
+    offsetX: safeX,
+    offsetY: safeY
+  };
+}
+
+function locateSignatureInImageData(imageData, imageWidth, imageHeight, profile, offsetX = 0, offsetY = 0) {
+  const pixels = imageData.data;
+  const signatureSize = Math.max(Number(profile.signatureSize) || 6, 1);
+  const signatureGap = Math.max(Number(profile.signatureGap) || 2, 0);
+  const cyanOffset = signatureSize + signatureGap;
+  const sampleInset = Math.max(Math.floor(signatureSize / 3), 1);
+
+  function sample(x, y) {
+    if (x < 0 || y < 0 || x >= imageWidth || y >= imageHeight) {
+      return null;
+    }
+
+    const index = ((y * imageWidth) + x) * 4;
+    return {
+      red: pixels[index],
+      green: pixels[index + 1],
+      blue: pixels[index + 2],
+      alpha: pixels[index + 3]
+    };
+  }
+
+  for (let y = 0; y <= imageHeight - signatureSize; y += 1) {
+    for (let x = 0; x <= imageWidth - (cyanOffset + signatureSize); x += 1) {
+      const magentaA = sample(x, y);
+      const magentaB = sample(x + sampleInset, y + sampleInset);
+      const cyanA = sample(x + cyanOffset, y);
+      const cyanB = sample(x + cyanOffset + sampleInset, y + sampleInset);
+
+      if (
+        magentaA && magentaB && cyanA && cyanB &&
+        isMagenta(magentaA.red, magentaA.green, magentaA.blue, magentaA.alpha) &&
+        isMagenta(magentaB.red, magentaB.green, magentaB.blue, magentaB.alpha) &&
+        isCyan(cyanA.red, cyanA.green, cyanA.blue, cyanA.alpha) &&
+        isCyan(cyanB.red, cyanB.green, cyanB.blue, cyanB.alpha)
+      ) {
+        return {
+          x: Math.max(offsetX + x - (profile.signatureX || 0), 0),
+          y: Math.max(offsetY + y - (profile.signatureY || 0), 0)
+        };
+      }
+    }
+  }
+
+  return null;
 }
 
 function locateSignatureBounds(profile) {
@@ -229,48 +299,23 @@ function locateSignatureBounds(profile) {
     return null;
   }
 
-  locateCanvas.width = sourceWidth;
-  locateCanvas.height = sourceHeight;
-  locateContext.drawImage(video, 0, 0, sourceWidth, sourceHeight);
-  const imageData = locateContext.getImageData(0, 0, sourceWidth, sourceHeight);
-  const pixels = imageData.data;
-  const signatureSize = Math.max(Number(profile.signatureSize) || 6, 1);
-  const signatureGap = Math.max(Number(profile.signatureGap) || 2, 0);
-  const cyanOffset = signatureSize + signatureGap;
-
-  function sample(x, y) {
-    if (x < 0 || y < 0 || x >= sourceWidth || y >= sourceHeight) {
-      return null;
+  const fullFrame = getImageDataFromVideoRegion(0, 0, sourceWidth, sourceHeight);
+  if (fullFrame) {
+    const fullMatch = locateSignatureInImageData(fullFrame.imageData, fullFrame.width, fullFrame.height, profile, 0, 0);
+    if (fullMatch) {
+      return fullMatch;
     }
-
-    const index = ((y * sourceWidth) + x) * 4;
-    return {
-      red: pixels[index],
-      green: pixels[index + 1],
-      blue: pixels[index + 2],
-      alpha: pixels[index + 3]
-    };
   }
 
-  for (let y = 0; y <= sourceHeight - signatureSize; y += 1) {
-    for (let x = 0; x <= sourceWidth - (cyanOffset + signatureSize); x += 1) {
-      const magentaA = sample(x, y);
-      const magentaB = sample(x + Math.max(signatureSize - 1, 0), y + Math.max(signatureSize - 1, 0));
-      const cyanA = sample(x + cyanOffset, y);
-      const cyanB = sample(x + cyanOffset + Math.max(signatureSize - 1, 0), y + Math.max(signatureSize - 1, 0));
-
-      if (
-        magentaA && magentaB && cyanA && cyanB &&
-        isMagenta(magentaA.red, magentaA.green, magentaA.blue, magentaA.alpha) &&
-        isMagenta(magentaB.red, magentaB.green, magentaB.blue, magentaB.alpha) &&
-        isCyan(cyanA.red, cyanA.green, cyanA.blue, cyanA.alpha) &&
-        isCyan(cyanB.red, cyanB.green, cyanB.blue, cyanB.alpha)
-      ) {
-        return {
-          x: Math.max(x - (profile.signatureX || 0), 0),
-          y: Math.max(y - (profile.signatureY || 0), 0)
-        };
-      }
+  const currentX = Number(cropX.value) || 0;
+  const currentY = Number(cropY.value) || 0;
+  const currentW = Math.max(Number(cropW.value) || profile.cropW || 1, 1);
+  const currentH = Math.max(Number(cropH.value) || profile.cropH || 1, 1);
+  const cropFrame = getImageDataFromVideoRegion(currentX, currentY, currentW, currentH);
+  if (cropFrame) {
+    const cropMatch = locateSignatureInImageData(cropFrame.imageData, cropFrame.width, cropFrame.height, profile, cropFrame.offsetX, cropFrame.offsetY);
+    if (cropMatch) {
+      return cropMatch;
     }
   }
 
