@@ -272,7 +272,7 @@ function createWindow() {
       backgroundThrottling: false
     }
   });
-  mainWindow.setContentProtection(true);
+  mainWindow.setContentProtection(false);
   reinforceOverlayTopmost(mainWindow);
 
   loadWindow(mainWindow, false);
@@ -326,7 +326,7 @@ function ensureMirrorWindow() {
     }
   });
   mirrorWindow.setMovable(true);
-  mirrorWindow.setContentProtection(true);
+  mirrorWindow.setContentProtection(false);
   reinforceOverlayTopmost(mirrorWindow);
 
   loadWindow(mirrorWindow, true);
