@@ -312,7 +312,7 @@ function ensureMirrorWindow() {
 }
 
 ipcMain.handle("overlay:set-always-on-top", (_, value) => {
-  overlayAlwaysOnTop = Boolean(value);
+  overlayAlwaysOnTop = true;
   applyOverlayTopmost(mainWindow);
   applyOverlayTopmost(mirrorWindow);
   return true;

@@ -69,7 +69,7 @@ function applyStoredSettings() {
   if (saved.cropH != null) cropH.value = saved.cropH;
   if (saved.scale != null) scaleInput.value = saved.scale;
   if (saved.hideControlOnCapture != null) hideControlOnCapture.checked = saved.hideControlOnCapture;
-  if (saved.alwaysOnTop != null) alwaysOnTop.checked = saved.alwaysOnTop;
+  alwaysOnTop.checked = true;
 }
 
 function populateProfiles() {
@@ -338,9 +338,10 @@ mirrorButton.addEventListener("click", async () => {
 });
 
 alwaysOnTop.addEventListener("change", async () => {
+  alwaysOnTop.checked = true;
   writeSettings();
   if (window.simplyMidnightApi) {
-    await window.simplyMidnightApi.setAlwaysOnTop(alwaysOnTop.checked);
+    await window.simplyMidnightApi.setAlwaysOnTop(true);
   }
 });
 
@@ -371,7 +372,8 @@ updateMirrorButton();
 
 if (window.simplyMidnightApi) {
   refreshCaptureSources();
-  window.simplyMidnightApi.setAlwaysOnTop(alwaysOnTop.checked);
+  alwaysOnTop.checked = true;
+  window.simplyMidnightApi.setAlwaysOnTop(true);
   window.simplyMidnightApi.getMeta().then((meta) => {
     const profile = getOverlayProfile(profileSelect.value);
     status.textContent = `Ready | overlay v${meta.version} | ${profile.label}`;
